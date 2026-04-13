@@ -1,0 +1,56 @@
+---
+name: "Dependency Impact Analysis"
+description: "Classify dependency PRs by semver bump type, detect risk patterns, and run AI-assisted impact analysis"
+author: "konflux-ci"
+
+inputs:
+  command:
+    description: "Command to run: classify, analyze, or both"
+    required: true
+    default: "both"
+  pr-number:
+    description: "Pull request number"
+    required: true
+  github-token:
+    description: "GitHub token for API operations"
+    required: true
+    default: ${{ github.token }}
+  api-key:
+    description: "LLM provider API key (required for analyze command)"
+    required: false
+  llm-provider:
+    description: "LLM provider: gemini or claude"
+    required: false
+    default: "gemini"
+  llm-model:
+    description: "LLM model name (provider-dependent default)"
+    required: false
+  auto-approve:
+    description: "Apply approved/lgtm labels and formal APPROVE review for eligible low-risk patches"
+    required: false
+    default: "false"
+
+outputs:
+  bump-type:
+    description: "Detected semver bump type (major/minor/patch/digest/unknown)"
+  risk-level:
+    description: "AI-assessed risk level (low/medium/high/unknown)"
+  context-json:
+    description: "Path to the assembled context JSON file"
+
+runs:
+  using: "docker"
+  image: "docker://quay.io/konflux-ci/deptriage:latest"
+  args:
+    - ${{ inputs.command }}
+  env:
+    INPUT_PR_NUMBER: ${{ inputs.pr-number }}
+    INPUT_GITHUB_TOKEN: ${{ inputs.github-token }}
+    INPUT_API_KEY: ${{ inputs.api-key }}
+    INPUT_LLM_PROVIDER: ${{ inputs.llm-provider }}
+    INPUT_LLM_MODEL: ${{ inputs.llm-model }}
+    INPUT_AUTO_APPROVE: ${{ inputs.auto-approve }}
+
+branding:
+  icon: "shield"
+  color: "blue"
