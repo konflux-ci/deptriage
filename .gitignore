@@ -1,0 +1,43 @@
+# Inverted .gitignore: ignore everything, then allow specific paths.
+# This keeps the repo clean and explicit about what gets committed.
+
+# Ignore everything
+*
+
+# Allow project structure
+!.gitignore
+!LICENSE
+!README.md
+!Makefile
+!Containerfile
+!action.yml
+
+# Go source
+!go.mod
+!go.sum
+!cmd/
+!cmd/**
+!internal/
+!internal/**
+!prompt/
+!prompt/**
+
+# CI
+!.github/
+!.github/**
+
+# OpenSpec
+!openspec/
+!openspec/**
+
+# Tests
+!test/
+!test/**
+
+# Ignore generated/build artifacts even inside allowed dirs
+coverage.out
+*.test
+*.exe
+*.dll
+*.so
+*.dylib

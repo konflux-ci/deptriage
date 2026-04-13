@@ -1,0 +1,48 @@
+# Example workflow showing recommended usage of dep-impact-analysis-action.
+# Copy this to your repo's .github/workflows/ and configure secrets.
+name: Dependency Impact Analysis
+
+on:
+  pull_request:
+    types: [labeled]
+
+jobs:
+  classify:
+    name: Classify dependency PR
+    if: >-
+      (github.event.label.name == 'dependency/direct' ||
+       github.event.label.name == 'dependency/transitive') &&
+      (github.event.pull_request.user.login == 'renovate[bot]' ||
+       github.event.pull_request.user.login == 'red-hat-konflux[bot]')
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: konflux-ci/dep-impact-analysis-action@main
+        with:
+          command: classify
+          pr-number: ${{ github.event.pull_request.number }}
+          auto-merge: 'true'
+
+  analyze:
+    name: AI impact analysis
+    if: >-
+      (github.event.label.name == 'semver/minor' ||
+       github.event.label.name == 'semver/major') &&
+      (github.event.pull_request.user.login == 'renovate[bot]' ||
+       github.event.pull_request.user.login == 'red-hat-konflux[bot]')
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: konflux-ci/dep-impact-analysis-action@main
+        with:
+          command: both
+          pr-number: ${{ github.event.pull_request.number }}
+          api-key: ${{ secrets.GEMINI_API_KEY }}
+          llm-provider: gemini
+          auto-approve: 'false'
