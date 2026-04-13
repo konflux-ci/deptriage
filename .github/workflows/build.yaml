@@ -1,0 +1,21 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Build binary
+        run: CGO_ENABLED=0 go build -o deptriage ./cmd/deptriage/
+      - name: Build Docker image
+        run: docker build -f Containerfile -t dep-impact-analysis-action:test .
+      - name: Verify binary in image
+        run: docker run --rm dep-impact-analysis-action:test deptriage --help
