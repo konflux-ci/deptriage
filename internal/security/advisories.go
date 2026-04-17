@@ -21,7 +21,7 @@ import (
 	"fmt"
 	"time"
 
-	gh "github.com/google/go-github/v68/github"
+	gh "github.com/google/go-github/v84/github"
 	"github.com/konflux-ci/dep-impact-analysis-action/internal/types"
 )
 
