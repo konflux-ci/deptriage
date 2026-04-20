@@ -22,7 +22,7 @@ import (
 	"fmt"
 	"net/http"
 
-	gh "github.com/google/go-github/v68/github"
+	gh "github.com/google/go-github/v84/github"
 )
 
 // PRData holds the metadata fetched from a pull request.

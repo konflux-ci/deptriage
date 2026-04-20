@@ -20,7 +20,7 @@ import (
 	"context"
 	"strings"
 
-	gh "github.com/google/go-github/v68/github"
+	gh "github.com/google/go-github/v84/github"
 	"golang.org/x/oauth2"
 )
 
