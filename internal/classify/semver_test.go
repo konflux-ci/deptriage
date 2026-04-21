@@ -95,6 +95,18 @@ func TestDetectBumpType(t *testing.T) {
 			body:  "`1.0.0` -> `1.0.1`",
 			want:  types.BumpPatch,
 		},
+		{
+			name:  "unicode arrow in body (Renovate/MintMaker style)",
+			title: "Update module github.com/google/go-github/v84 to v85",
+			body:  "| [github.com/google/go-github/v84] | `v84.0.0` → `v85.0.0` |",
+			want:  types.BumpMajor,
+		},
+		{
+			name:  "unicode arrow minor bump",
+			title: "Update foo",
+			body:  "`v1.2.0` → `v1.3.0`",
+			want:  types.BumpMinor,
+		},
 	}
 
 	for _, tt := range tests {
