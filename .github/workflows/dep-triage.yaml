@@ -2,35 +2,14 @@ name: Dependency Impact Analysis
 
 on:
   pull_request:
-    types: [labeled]
+    types: [opened, synchronize]
 
 jobs:
-  classify:
-    name: Classify dependency PR
+  triage:
+    name: Triage dependency PR
     if: >-
-      (github.event.label.name == 'dependency/direct' ||
-       github.event.label.name == 'dependency/transitive') &&
-      (github.event.pull_request.user.login == 'renovate[bot]' ||
-       github.event.pull_request.user.login == 'red-hat-konflux[bot]')
-    runs-on: ubuntu-latest
-    permissions:
-      pull-requests: write
-      issues: write
-    steps:
-      - uses: actions/checkout@v6
-      - uses: ./
-        with:
-          command: classify
-          pr-number: ${{ github.event.pull_request.number }}
-          auto-approve: 'true'
-
-  analyze:
-    name: AI impact analysis
-    if: >-
-      (github.event.label.name == 'semver/minor' ||
-       github.event.label.name == 'semver/major') &&
-      (github.event.pull_request.user.login == 'renovate[bot]' ||
-       github.event.pull_request.user.login == 'red-hat-konflux[bot]')
+      github.event.pull_request.user.login == 'renovate[bot]' ||
+      github.event.pull_request.user.login == 'red-hat-konflux[bot]'
     runs-on: ubuntu-latest
     permissions:
       pull-requests: write
@@ -43,4 +22,4 @@ jobs:
           pr-number: ${{ github.event.pull_request.number }}
           api-key: ${{ secrets.GEMINI_API_KEY }}
           llm-provider: gemini
-          auto-approve: 'false'
+          auto-approve: 'true'
