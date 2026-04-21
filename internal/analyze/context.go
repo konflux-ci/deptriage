@@ -26,7 +26,7 @@ import (
 	"github.com/konflux-ci/dep-impact-analysis-action/internal/security"
 	"github.com/konflux-ci/dep-impact-analysis-action/internal/types"
 
-	gh "github.com/google/go-github/v84/github"
+	gh "github.com/google/go-github/v85/github"
 )
 
 // GatherContext assembles the full context JSON for LLM consumption.
