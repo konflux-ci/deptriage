@@ -1,7 +1,7 @@
 ---
 name: "Dependency Impact Analysis"
 description: "Classify dependency PRs by semver bump type, detect risk patterns, and run AI-assisted impact analysis"
-author: "konflux-ci"
+author: "konflux-infra"
 
 inputs:
   command:

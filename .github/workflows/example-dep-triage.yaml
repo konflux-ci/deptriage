@@ -20,7 +20,7 @@ jobs:
       issues: write
     steps:
       - uses: actions/checkout@v5
-      - uses: konflux-ci/dep-impact-analysis-action@main
+      - uses: konflux-ci/deptriage@main
         with:
           command: classify
           pr-number: ${{ github.event.pull_request.number }}
@@ -39,7 +39,7 @@ jobs:
       issues: write
     steps:
       - uses: actions/checkout@v5
-      - uses: konflux-ci/dep-impact-analysis-action@main
+      - uses: konflux-ci/deptriage@main
         with:
           command: both
           pr-number: ${{ github.event.pull_request.number }}
