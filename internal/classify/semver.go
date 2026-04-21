@@ -25,12 +25,12 @@ import (
 )
 
 var (
-	// Semver version pair: v1.2.3 -> v1.3.0 or v9.5 -> v9.7 (third component optional)
-	// Handles optional v prefix, backticks, and Docker-style suffixes (e.g. v9.5-alpine)
-	versionRe = regexp.MustCompile("[`]?v?([0-9]+)\\.([0-9]+)(?:\\.([0-9]+))?(?:[-.][^`\\s]*)?[`]?\\s*->\\s*[`]?v?([0-9]+)\\.([0-9]+)(?:\\.([0-9]+))?")
+	// Semver version pair: v1.2.3 -> v1.3.0 or v9.5 → v9.7 (third component optional)
+	// Handles optional v prefix, backticks, -> or → arrows, and Docker-style suffixes
+	versionRe = regexp.MustCompile("[`]?v?([0-9]+)\\.([0-9]+)(?:\\.([0-9]+))?(?:[-.][^`\\s]*)?[`]?\\s*(?:->|→)\\s*[`]?v?([0-9]+)\\.([0-9]+)(?:\\.([0-9]+))?")
 
 	// Digest-only: abcdef0 -> 1234abc
-	digestRe = regexp.MustCompile("[`]?([0-9a-f]{7,})[`]?\\s*->\\s*[`]?([0-9a-f]{7,})")
+	digestRe = regexp.MustCompile("[`]?([0-9a-f]{7,})[`]?\\s*(?:->|→)\\s*[`]?([0-9a-f]{7,})")
 )
 
 // DetectBumpType determines the semver bump type from PR title and body text.
