@@ -1,5 +1,5 @@
 /*
-Copyright 2025 Red Hat, Inc.
+Copyright 2026 Red Hat, Inc.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -21,7 +21,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"time"
 )
@@ -83,23 +82,20 @@ func (c *Claude) Analyze(ctx context.Context, prompt string) (string, error) {
 		return "", fmt.Errorf("marshaling claude request: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", "https://api.anthropic.com/v1/messages", bytes.NewReader(body))
-	if err != nil {
-		return "", fmt.Errorf("creating claude request: %w", err)
+	buildReq := func() (*http.Request, error) {
+		req, err := http.NewRequestWithContext(ctx, "POST", "https://api.anthropic.com/v1/messages", bytes.NewReader(body))
+		if err != nil {
+			return nil, fmt.Errorf("creating claude request: %w", err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("x-api-key", c.apiKey)
+		req.Header.Set("anthropic-version", claudeAPIVersion)
+		return req, nil
 	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("x-api-key", c.apiKey)
-	req.Header.Set("anthropic-version", claudeAPIVersion)
 
-	resp, err := c.client.Do(req)
+	resp, respBody, err := doWithRetry(ctx, c.client, buildReq)
 	if err != nil {
 		return "", fmt.Errorf("claude API call: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", fmt.Errorf("reading claude response: %w", err)
 	}
 
 	if resp.StatusCode != http.StatusOK {

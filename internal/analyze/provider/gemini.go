@@ -1,5 +1,5 @@
 /*
-Copyright 2025 Red Hat, Inc.
+Copyright 2026 Red Hat, Inc.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -21,7 +21,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"time"
 )
@@ -86,21 +85,18 @@ func (g *Gemini) Analyze(ctx context.Context, prompt string) (string, error) {
 		return "", fmt.Errorf("marshaling gemini request: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(body))
-	if err != nil {
-		return "", fmt.Errorf("creating gemini request: %w", err)
+	buildReq := func() (*http.Request, error) {
+		req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(body))
+		if err != nil {
+			return nil, fmt.Errorf("creating gemini request: %w", err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+		return req, nil
 	}
-	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := g.client.Do(req)
+	resp, respBody, err := doWithRetry(ctx, g.client, buildReq)
 	if err != nil {
 		return "", fmt.Errorf("gemini API call: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", fmt.Errorf("reading gemini response: %w", err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
