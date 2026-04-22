@@ -4,6 +4,10 @@ on:
   pull_request:
     types: [opened, synchronize]
 
+concurrency:
+  group: dep-triage-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
   triage:
     name: Triage dependency PR
