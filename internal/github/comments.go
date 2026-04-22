@@ -21,7 +21,7 @@ import (
 	"fmt"
 	"strings"
 
-	gh "github.com/google/go-github/v84/github"
+	gh "github.com/google/go-github/v85/github"
 )
 
 const (
