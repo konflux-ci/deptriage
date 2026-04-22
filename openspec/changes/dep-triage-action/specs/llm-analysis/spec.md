@@ -37,8 +37,13 @@ The system SHALL never block CI due to LLM API failures. All API errors SHALL re
 - **WHEN** the LLM API call does not complete within 120 seconds
 - **THEN** the system SHALL abort and post an "analysis unavailable" comment
 
-#### Scenario: API returns non-200 status
-- **WHEN** the LLM API returns an HTTP error (4xx, 5xx)
+#### Scenario: API returns rate limit (429)
+- **WHEN** the LLM API returns HTTP 429 (Too Many Requests)
+- **THEN** the system SHALL retry up to 3 times with exponential backoff (starting at 5 seconds, doubling each attempt), respecting the `Retry-After` header when present
+- **AND** if all retries are exhausted, the system SHALL log the error and post an "analysis unavailable" comment
+
+#### Scenario: API returns non-200 status (non-429)
+- **WHEN** the LLM API returns an HTTP error (4xx other than 429, or 5xx)
 - **THEN** the system SHALL log the error and post an "analysis unavailable" comment
 
 #### Scenario: Malformed API response

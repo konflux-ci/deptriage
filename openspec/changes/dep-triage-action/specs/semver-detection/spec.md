@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Detect semver bump type from PR content
-The system SHALL parse the PR title and body to determine the semver bump type of a dependency update. It SHALL support three-component versions (`v1.2.3`), two-component versions (`v1.2`), and digest-only changes (`abcdef0 -> 1234abc`). When multiple version pairs are present, the system SHALL return the highest bump level across all pairs (major > minor > patch > digest > unknown).
+The system SHALL parse the PR title and body to determine the semver bump type of a dependency update. It SHALL support three-component versions (`v1.2.3`), two-component versions (`v1.2`), and digest-only changes (`abcdef0 -> 1234abc`). It SHALL recognize both ASCII arrows (`->`) and Unicode arrows (`→`) as version separators. When multiple version pairs are present, the system SHALL return the highest bump level across all pairs (major > minor > patch > digest > unknown).
 
 #### Scenario: Three-component major bump
 - **WHEN** the PR body contains `` `v1.5.0` -> `v2.0.0` ``
@@ -34,6 +34,18 @@ The system SHALL parse the PR title and body to determine the semver bump type o
 #### Scenario: Optional v prefix
 - **WHEN** a version string appears without the `v` prefix (e.g., `1.2.3 -> 1.3.0`)
 - **THEN** the system SHALL still detect the bump type correctly
+
+#### Scenario: Unicode arrow separator (Renovate/MintMaker)
+- **WHEN** the PR body contains `` `v84.0.0` → `v85.0.0` `` (using the Unicode arrow `→`)
+- **THEN** the system SHALL detect the bump type as `major`
+
+#### Scenario: Docker tag with build ID suffix
+- **WHEN** the PR body contains `` `10.1-1776071394` → `10.1-1776646707` `` (same major.minor, different build suffix)
+- **THEN** the system SHALL return bump type `patch`
+
+#### Scenario: Docker tag with named suffix (e.g. alpine)
+- **WHEN** the PR body contains `` `18.5-alpine` → `18.6-alpine` ``
+- **THEN** the system SHALL return bump type `minor`
 
 ### Requirement: Apply semver labels to PR
 The system SHALL apply a color-coded label to the PR based on the detected bump type. Labels SHALL be created if they do not already exist.

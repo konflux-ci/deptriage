@@ -61,12 +61,16 @@ The system SHALL submit formal GitHub review events (APPROVE, REQUEST_CHANGES, C
 The system SHALL apply `approved` and `lgtm` labels to dependency PRs that meet the auto-approve criteria. This replaces direct auto-merge — the actual merge is handled by external merge-bot automation that acts on these labels.
 
 #### Scenario: Patch bump eligible for auto-approve
-- **WHEN** the bump type is `patch`, auto-approve is enabled, and no security advisories exist
+- **WHEN** the bump type is `patch`, auto-approve is enabled, no risk hints are detected, and no security advisories exist
 - **THEN** the system SHALL apply the `approved` and `lgtm` labels to the PR
 
 #### Scenario: Non-gomod digest eligible for auto-approve
-- **WHEN** the bump type is `digest`, the ecosystem is NOT `gomod`, auto-approve is enabled, and no security advisories exist
+- **WHEN** the bump type is `digest`, the ecosystem is NOT `gomod`, auto-approve is enabled, no risk hints are detected, and no security advisories exist
 - **THEN** the system SHALL apply the `approved` and `lgtm` labels to the PR
+
+#### Scenario: Risk hints block auto-approve
+- **WHEN** the bump type is `patch` and auto-approve is enabled, but risk hints are detected (e.g., Go toolchain update, Go version bump)
+- **THEN** the system SHALL NOT apply auto-approve labels
 
 #### Scenario: Gomod digest NOT eligible for auto-approve
 - **WHEN** the bump type is `digest` and the ecosystem is `gomod`

@@ -9,8 +9,9 @@ to help reviewers prioritize their work.
 ## Features
 
 - **Semver classification** -- detects major, minor, patch, and digest bumps from
-  PR content with ecosystem-aware labeling (Go module pseudo-version digests are
-  treated as minor due to lack of semver guarantees)
+  PR content using both ASCII (`->`) and Unicode (`→`) arrows, with support for
+  Docker build ID suffixes and ecosystem-aware labeling (Go module pseudo-version
+  digests are treated as minor due to lack of semver guarantees)
 - **Package extraction** -- parses Renovate/Mintmaker PR bodies (markdown tables,
   linked and bare formats) with fallback to PR title
 - **Import analysis** -- uses `go mod why`, `go mod graph`, and source scanning
@@ -21,7 +22,8 @@ to help reviewers prioritize their work.
 - **Security advisories** -- queries GitHub Global Security Advisories API and
   optionally runs `govulncheck` for reachability analysis
 - **LLM impact analysis** -- assembles structured context and calls Gemini or
-  Claude to produce risk assessments with secret redaction
+  Claude to produce risk assessments with secret redaction and automatic retry
+  with exponential backoff on rate limits (429)
 - **PR operations** -- applies labels, posts/updates comments with history
   collapse, submits formal review events (APPROVE/REQUEST_CHANGES/COMMENT),
   and applies auto-approve labels for eligible patches
@@ -66,14 +68,41 @@ deptriage both --repo owner/repo --pr-number 42 --github-token $TOKEN \
 
 ### As a GitHub Action
 
-This repository contains the Go source code. For GitHub Action packaging, see
-[konflux-ci/deptriage-action](https://github.com/konflux-ci/deptriage-action)
-(planned), which wraps the binary in a Docker container action.
+This repository doubles as a GitHub Action. The `action.yml` at the repo root
+defines a Docker container action that pulls the pre-built image from
+`quay.io/konflux-ci/deptriage:latest`.
 
-### As a GitLab component (planned)
+```yaml
+# .github/workflows/dep-triage.yaml
+name: Dependency Impact Analysis
 
-The Go binary can also be invoked from GitLab CI pipelines. A GitLab CI
-component repository is planned for direct integration.
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+jobs:
+  triage:
+    name: Triage dependency PR
+    if: >-
+      github.event.pull_request.user.login == 'renovate[bot]' ||
+      github.event.pull_request.user.login == 'red-hat-konflux[bot]'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+    steps:
+      - uses: actions/checkout@v6
+      - uses: konflux-ci/deptriage@main
+        with:
+          command: both
+          pr-number: ${{ github.event.pull_request.number }}
+          api-key: ${{ secrets.GEMINI_API_KEY }}
+          llm-provider: gemini
+          auto-approve: 'true'
+```
+
+See `.github/workflows/example-dep-triage.yaml` for a ready-to-copy example.
 
 ## Building
 
