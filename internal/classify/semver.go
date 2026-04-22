@@ -27,7 +27,8 @@ import (
 var (
 	// Semver version pair: v1.2.3 -> v1.3.0 or v9.5 → v9.7 (third component optional)
 	// Handles optional v prefix, backticks, -> or → arrows, and Docker-style suffixes
-	versionRe = regexp.MustCompile("[`]?v?([0-9]+)\\.([0-9]+)(?:\\.([0-9]+))?(?:[-.][^`\\s]*)?[`]?\\s*(?:->|→)\\s*[`]?v?([0-9]+)\\.([0-9]+)(?:\\.([0-9]+))?")
+	// Captures: (1)oldMaj (2)oldMin (3)oldPat? (4)oldSuffix? (5)newMaj (6)newMin (7)newPat? (8)newSuffix?
+	versionRe = regexp.MustCompile("[`]?v?([0-9]+)\\.([0-9]+)(?:\\.([0-9]+))?(?:[-.][`]?([^`\\s]*))?[`]?\\s*(?:->|→)\\s*[`]?v?([0-9]+)\\.([0-9]+)(?:\\.([0-9]+))?(?:[-.][`]?([^`\\s]*))?")
 
 	// Digest-only: abcdef0 -> 1234abc
 	digestRe = regexp.MustCompile("[`]?([0-9a-f]{7,})[`]?\\s*(?:->|→)\\s*[`]?([0-9a-f]{7,})")
@@ -39,7 +40,7 @@ func DetectBumpType(title, body string) types.BumpType {
 	highest := types.BumpUnknown
 
 	for _, match := range versionRe.FindAllStringSubmatch(text, -1) {
-		bump := compareSemver(match[1], match[2], match[3], match[4], match[5], match[6])
+		bump := compareSemver(match[1], match[2], match[3], match[4], match[5], match[6], match[7], match[8])
 		highest = maxBump(highest, bump)
 	}
 
@@ -55,13 +56,16 @@ func DetectBumpType(title, body string) types.BumpType {
 	return types.BumpUnknown
 }
 
-func compareSemver(oldMaj, oldMin, oldPat, newMaj, newMin, newPat string) types.BumpType {
+func compareSemver(oldMaj, oldMin, oldPat, oldSuffix, newMaj, newMin, newPat, newSuffix string) types.BumpType {
 	switch {
 	case mustAtoi(newMaj) > mustAtoi(oldMaj):
 		return types.BumpMajor
 	case mustAtoi(newMin) > mustAtoi(oldMin):
 		return types.BumpMinor
 	case oldPat != "" && newPat != "" && mustAtoi(newPat) > mustAtoi(oldPat):
+		return types.BumpPatch
+	case oldSuffix != "" && newSuffix != "" && oldSuffix != newSuffix:
+		// Same major.minor(.patch) but different suffix (e.g. build IDs like 10.1-1776071394 → 10.1-1776646707)
 		return types.BumpPatch
 	default:
 		return types.BumpUnknown
