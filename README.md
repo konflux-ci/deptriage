@@ -69,8 +69,8 @@ deptriage both --repo owner/repo --pr-number 42 --github-token $TOKEN \
 ### As a GitHub Action
 
 This repository doubles as a GitHub Action. The `action.yml` at the repo root
-defines a Docker container action that pulls the pre-built image from
-`quay.io/konflux-ci/deptriage:latest`.
+defines a Docker container action that pulls a version-pinned image from
+`quay.io/konflux-ci/deptriage`.
 
 ```yaml
 # .github/workflows/dep-triage.yaml
@@ -103,6 +103,35 @@ jobs:
 ```
 
 See `.github/workflows/example-dep-triage.yaml` for a ready-to-copy example.
+
+## Releasing
+
+Every merge to `main` triggers a Konflux build that pushes a new image to
+`quay.io/konflux-ci/deptriage:latest`. The `action.yml` references a
+version-tagged image (e.g. `deptriage:v0.1.0`), not `latest`, so code changes
+don't take effect until a release is cut.
+
+To create a new release:
+
+1. **Verify** that the `latest` image on quay.io contains the changes you want
+   to release.
+2. **Tag the image** on quay.io with a semver tag:
+   ```bash
+   skopeo copy \
+     docker://quay.io/konflux-ci/deptriage:latest \
+     docker://quay.io/konflux-ci/deptriage:v0.2.0
+   ```
+   Alternatively, add the tag via the Quay UI.
+3. **Update `action.yml`** to reference the new tag:
+   ```yaml
+   image: "docker://quay.io/konflux-ci/deptriage:v0.2.0"
+   ```
+4. **Merge** the `action.yml` change. The resulting Konflux build produces a new
+   `latest` image, but that image is functionally identical (only `action.yml`
+   changed), so no infinite loop occurs.
+
+Consumer workflows that reference `konflux-ci/deptriage@main` will pick up the
+new image tag immediately after step 4.
 
 ## Building
 
