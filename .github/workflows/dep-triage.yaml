@@ -16,7 +16,7 @@ jobs:
       github.event.pull_request.user.login == 'red-hat-konflux[bot]'
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
       pull-requests: write
       issues: write
     steps:
@@ -28,3 +28,4 @@ jobs:
           api-key: ${{ secrets.GEMINI_API_KEY }}
           llm-provider: gemini
           auto-approve: 'true'
+          auto-merge: 'true'

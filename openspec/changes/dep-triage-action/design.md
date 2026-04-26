@@ -223,8 +223,31 @@ Timeouts produce structured errors that are logged and result in graceful degrad
 
 **[govulncheck availability and speed]** → Not installed by default; can be slow on large codebases (up to 5 minutes). Mitigation: optional with a 300-second timeout; results are supplementary, not required for analysis. Ship `govulncheck` in the container image so it's available when using the Docker action.
 
-**[Auto-approve via labels]** → Instead of direct auto-merge via the GitHub API, the action applies `approved`/`lgtm` labels for eligible patches. The actual merge is handled by external merge-bot automation (e.g., Konflux merge bot) that acts on these labels after CI passes. This decouples the approval decision from the merge mechanism and ensures PRs with failing tests are never merged. Auto-approve only applies to patches and non-gomod digests (not minor/major), only when no security advisories exist, and is configurable via `--auto-approve` flag (default: off). Gomod digest bumps are excluded because pseudo-versions have no semver guarantees.
+**[Auto-approve via labels]** → The action applies `approved`/`lgtm` labels for eligible patches. For repos with external merge-bot automation (e.g., Prow/Tide), these labels are sufficient — the bot merges after CI passes. For repos without external merge bots, the `auto-merge` flag enables direct merge via the GitHub API (see Decision #16). Auto-approve only applies to patches and non-gomod digests (not minor/major), only when no risk hints are detected, and is configurable via `--auto-approve` flag (default: off). Gomod digest bumps are excluded because pseudo-versions have no semver guarantees.
 
 **[Formal review auto-approve risk]** → Auto-approving low-risk PRs could let a subtle breaking change through. Mitigation: auto-approve only for patches (not minor/major or gomod digests), and only when no security advisories exist. Configurable via `--auto-approve` flag (default: off).
 
 **[Secret redaction coverage]** → Regex-based redaction may miss novel secret formats. Mitigation: use well-known patterns (AWS keys, GitHub tokens, generic API keys, base64-encoded credentials). Better to over-redact than under-redact; false positives are harmless.
+
+### 16. Auto-merge: opt-in direct merge via GitHub API
+
+Two-tier system for getting dependency PRs merged:
+
+- **`auto-approve`** (Tier 1): Applies `approved`/`lgtm` labels and formal review events. Sufficient for repos with Prow/Tide or other merge bots that watch for these labels.
+- **`auto-merge`** (Tier 2): Actually merges the PR via `PullRequests.Merge()` with squash method. For repos that have no external merge automation.
+
+`auto-merge` is opt-in (default: `false`) and requires `auto-approve` to also be enabled — merging without approval makes no sense.
+
+**Merge eligibility** is driven by deterministic signals, not the AI risk assessment:
+1. `approved` + `lgtm` labels are present (classify phase approved the PR)
+2. All CI checks pass (`success` or `neutral`, excluding the deptriage workflow itself)
+3. AI risk is NOT `high` (HIGH submits REQUEST_CHANGES, which is a hard block)
+
+The AI risk level is informational — MEDIUM risk does NOT block merge. Experience shows that dependency updates (e.g., Tekton task digest bumps) flagged as MEDIUM are safe when CI checks pass. The Konflux pipeline is the real safety gate, not the AI assessment.
+
+The merge step runs at the end of the analyze phase and follows the same graceful failure semantics: errors are logged as warnings, the action never fails due to a merge issue. The workflow must grant `contents: write` permission for the merge API.
+
+**Alternatives considered:**
+- Gate on AI risk level (require LOW) — too conservative; MEDIUM-risk Tekton task updates are routinely safe when CI passes. Would leave approved PRs unmerged.
+- Enable GitHub native auto-merge via GraphQL — requires branch protection with required status checks, which many repos don't have configured.
+- Always merge (no risk check) — too aggressive; HIGH risk indicates genuine concern requiring human review.

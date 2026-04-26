@@ -33,6 +33,7 @@ const (
 	flagAPIKey         = "api-key"
 	flagModel          = "model"
 	flagAutoApprove    = "auto-approve"
+	flagAutoMerge      = "auto-merge"
 	flagClassifyOutput = "classify-output"
 )
 
@@ -91,6 +92,7 @@ func init() {
 	analyzeCmd.Flags().String(flagAPIKey, envStr("INPUT_API_KEY", ""), "LLM provider API key")
 	analyzeCmd.Flags().String(flagModel, envStr("INPUT_LLM_MODEL", ""), "LLM model name (provider-dependent default)")
 	analyzeCmd.Flags().Bool(flagAutoApprove, envBool("INPUT_AUTO_APPROVE"), "Enable formal APPROVE review for low-risk patches")
+	analyzeCmd.Flags().Bool(flagAutoMerge, envBool("INPUT_AUTO_MERGE"), "Merge eligible PRs after analysis (requires auto-approve)")
 	analyzeCmd.Flags().String(flagClassifyOutput, "/tmp/deptriage-classify.json", "Path to classify result JSON")
 
 	// Both command inherits all flags from classify and analyze
@@ -124,6 +126,7 @@ func runAnalyze(cmd *cobra.Command, args []string) error {
 	apiKey, _ := cmd.Flags().GetString(flagAPIKey)
 	model, _ := cmd.Flags().GetString(flagModel)
 	autoApprove, _ := cmd.Flags().GetBool(flagAutoApprove)
+	autoMerge, _ := cmd.Flags().GetBool(flagAutoMerge)
 	classifyOutput, _ := cmd.Flags().GetString(flagClassifyOutput)
 
 	workDir, _ := os.Getwd()
@@ -136,6 +139,7 @@ func runAnalyze(cmd *cobra.Command, args []string) error {
 		APIKey:         apiKey,
 		Model:          model,
 		AutoApprove:    autoApprove,
+		AutoMerge:      autoMerge,
 		ClassifyOutput: classifyOutput,
 		WorkDir:        workDir,
 	})

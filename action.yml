@@ -29,6 +29,10 @@ inputs:
     description: "Apply approved/lgtm labels and formal APPROVE review for eligible low-risk patches"
     required: false
     default: "false"
+  auto-merge:
+    description: "Merge eligible PRs after analysis when auto-approve labels are present and CI checks pass (requires auto-approve)"
+    required: false
+    default: "false"
 
 outputs:
   bump-type:
@@ -50,6 +54,7 @@ runs:
     INPUT_LLM_PROVIDER: ${{ inputs.llm-provider }}
     INPUT_LLM_MODEL: ${{ inputs.llm-model }}
     INPUT_AUTO_APPROVE: ${{ inputs.auto-approve }}
+    INPUT_AUTO_MERGE: ${{ inputs.auto-merge }}
 
 branding:
   icon: "shield"
