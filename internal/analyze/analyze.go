@@ -41,6 +41,7 @@ type Options struct {
 	APIKey         string
 	Model          string
 	AutoApprove    bool
+	AutoMerge      bool
 	ClassifyOutput string
 	WorkDir        string
 }
@@ -108,6 +109,11 @@ func Run(ctx context.Context, opts Options) error {
 	// Submit review if applicable
 	submitReview(ctx, client, opts, riskLevel, response)
 
+	// Auto-merge if eligible
+	if shouldAttemptMerge(opts.AutoMerge, opts.AutoApprove, riskLevel) {
+		tryMerge(ctx, client, opts)
+	}
+
 	return nil
 }
 
@@ -145,6 +151,41 @@ func applyRiskLabel(ctx context.Context, client *ghclient.Client, prNumber int, 
 	if err := client.EnsureLabel(ctx, prNumber, labelName, color, desc); err != nil {
 		slog.Warn("failed to apply risk label", "label", labelName, "error", err)
 	}
+}
+
+func shouldAttemptMerge(autoMerge, autoApprove bool, risk types.RiskLevel) bool {
+	return autoMerge && autoApprove && risk != types.RiskHigh
+}
+
+const deptriageCheckName = "Triage dependency PR"
+
+func tryMerge(ctx context.Context, client *ghclient.Client, opts Options) {
+	hasLabels, err := client.HasLabels(ctx, opts.PRNumber, []string{"approved", "lgtm"})
+	if err != nil {
+		slog.Warn("failed to check PR labels for auto-merge", "error", err)
+		return
+	}
+	if !hasLabels {
+		slog.Info("skipping auto-merge: approved/lgtm labels not present")
+		return
+	}
+
+	allPassed, err := client.ChecksAllPassed(ctx, opts.PRNumber, deptriageCheckName)
+	if err != nil {
+		slog.Warn("failed to check CI status for auto-merge", "error", err)
+		return
+	}
+	if !allPassed {
+		slog.Info("skipping auto-merge: not all CI checks have passed")
+		return
+	}
+
+	slog.Info("all merge conditions met, merging PR", "pr", opts.PRNumber)
+	if err := client.MergePR(ctx, opts.PRNumber, "squash"); err != nil {
+		slog.Warn("auto-merge failed", "error", err)
+		return
+	}
+	slog.Info("PR merged successfully", "pr", opts.PRNumber)
 }
 
 func submitReview(ctx context.Context, client *ghclient.Client, opts Options, risk types.RiskLevel, body string) {

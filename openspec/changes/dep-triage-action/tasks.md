@@ -84,7 +84,12 @@
 - [x] 12.3 Implement label operations: create-if-not-exists, apply, remove conflicting labels
 - [x] 12.4 Implement comment management: find existing comment by hidden marker, update with history collapse into `<details>` blocks, create new with marker, respect 65KB limit
 - [x] 12.5 Implement formal review submission (APPROVE/REQUEST_CHANGES/COMMENT) based on risk level and auto-approve flag
-- [x] 12.6 Implement auto-merge trigger via GitHub API
+- [ ] 12.6 Implement auto-merge trigger via GitHub API
+  - [ ] 12.6a Add `MergePR` method to `internal/github/pr.go`
+  - [ ] 12.6b Add `GetCheckStatus` method to `internal/github/pr.go` (combined status + check runs, self-exclusion)
+  - [ ] 12.6c Add `auto-merge` input to `action.yml` and wire through CLI flags in `cmd/deptriage/main.go`
+  - [ ] 12.6d Integrate merge step at end of `analyze.Run()` (eligibility: labels present + CI green + risk != HIGH)
+  - [ ] 12.6e Add unit tests for merge eligibility logic
 - [x] 12.7 Add unit tests for comment management (first post, update with collapse, truncation)
 
 ## 13. Analyze Orchestrator

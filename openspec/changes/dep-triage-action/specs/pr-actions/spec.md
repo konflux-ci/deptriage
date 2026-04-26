@@ -83,3 +83,6 @@ The system SHALL apply `approved` and `lgtm` labels to dependency PRs that meet 
 #### Scenario: Auto-approve disabled
 - **WHEN** auto-approve is disabled via the `--auto-approve=false` flag or input (default)
 - **THEN** the system SHALL NOT apply auto-approve labels regardless of bump type
+
+### Requirement: Auto-merge (separate capability)
+Auto-merge — the actual merging of PRs via the GitHub API — is a separate capability from auto-approve label application. See the [auto-merge spec](../auto-merge/spec.md) for full requirements. Auto-approve labels are a prerequisite for auto-merge but do not themselves trigger a merge.

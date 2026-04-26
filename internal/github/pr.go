@@ -105,3 +105,82 @@ func isNotFound(err error) bool {
 	var ghErr *gh.ErrorResponse
 	return errors.As(err, &ghErr) && ghErr.Response != nil && ghErr.Response.StatusCode == http.StatusNotFound
 }
+
+// MergePR merges a pull request using the specified method (merge, squash, rebase).
+func (c *Client) MergePR(ctx context.Context, prNumber int, method string) error {
+	_, _, err := c.inner.PullRequests.Merge(ctx, c.owner, c.repo, prNumber, "", &gh.PullRequestOptions{
+		MergeMethod: method,
+	})
+	if err != nil {
+		return fmt.Errorf("merging PR #%d: %w", prNumber, err)
+	}
+	return nil
+}
+
+// ChecksAllPassed returns true if all CI checks on the PR head SHA are success
+// or neutral, excluding the specified workflow name (to avoid self-referencing).
+func (c *Client) ChecksAllPassed(ctx context.Context, prNumber int, excludeWorkflow string) (bool, error) {
+	pr, _, err := c.inner.PullRequests.Get(ctx, c.owner, c.repo, prNumber)
+	if err != nil {
+		return false, fmt.Errorf("fetching PR #%d for check status: %w", prNumber, err)
+	}
+	ref := pr.GetHead().GetSHA()
+
+	opts := &gh.ListCheckRunsOptions{
+		ListOptions: gh.ListOptions{PerPage: 100},
+	}
+	for {
+		result, resp, err := c.inner.Checks.ListCheckRunsForRef(ctx, c.owner, c.repo, ref, opts)
+		if err != nil {
+			return false, fmt.Errorf("listing check runs for %s: %w", ref, err)
+		}
+		for _, cr := range result.CheckRuns {
+			if cr.GetName() == excludeWorkflow {
+				continue
+			}
+			conclusion := cr.GetConclusion()
+			if conclusion != "success" && conclusion != "neutral" && conclusion != "skipped" {
+				return false, nil
+			}
+		}
+		if resp.NextPage == 0 {
+			break
+		}
+		opts.Page = resp.NextPage
+	}
+
+	// Also check combined commit status (legacy status API)
+	status, _, err := c.inner.Repositories.GetCombinedStatus(ctx, c.owner, c.repo, ref, nil)
+	if err != nil {
+		return false, fmt.Errorf("fetching combined status for %s: %w", ref, err)
+	}
+	for _, s := range status.Statuses {
+		if s.GetContext() == excludeWorkflow {
+			continue
+		}
+		state := s.GetState()
+		if state != "success" {
+			return false, nil
+		}
+	}
+
+	return true, nil
+}
+
+// HasLabels returns true if the PR has all the specified labels.
+func (c *Client) HasLabels(ctx context.Context, prNumber int, labels []string) (bool, error) {
+	pr, err := c.FetchPR(ctx, prNumber)
+	if err != nil {
+		return false, err
+	}
+	labelSet := make(map[string]bool, len(pr.Labels))
+	for _, l := range pr.Labels {
+		labelSet[l] = true
+	}
+	for _, required := range labels {
+		if !labelSet[required] {
+			return false, nil
+		}
+	}
+	return true, nil
+}
