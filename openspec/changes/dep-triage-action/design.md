@@ -247,7 +247,10 @@ The AI risk level is informational — MEDIUM risk does NOT block merge. Experie
 
 The merge step runs at the end of the analyze phase and follows the same graceful failure semantics: errors are logged as warnings, the action never fails due to a merge issue. The workflow must grant `contents: write` permission for the merge API.
 
+**Two-path merge strategy:** The inline `tryMerge` in the analyze phase is a best-effort attempt — it succeeds only if all checks happen to finish before the action. In practice, the deptriage action finishes in ~20s while lint, test, and Konflux pipeline take 30s–5min. The primary merge path is a separate `auto-merge.yaml` workflow triggered on `check_suite: completed`. Each time a check suite finishes, the workflow checks if all checks are now green, labels are present, and risk is not HIGH — then merges. Most firings are no-ops; the last check to complete triggers the actual merge.
+
 **Alternatives considered:**
 - Gate on AI risk level (require LOW) — too conservative; MEDIUM-risk Tekton task updates are routinely safe when CI passes. Would leave approved PRs unmerged.
 - Enable GitHub native auto-merge via GraphQL — requires branch protection with required status checks, which many repos don't have configured.
 - Always merge (no risk check) — too aggressive; HIGH risk indicates genuine concern requiring human review.
+- Poll-and-wait in the action — ties up a runner for minutes; wasteful and fragile.
