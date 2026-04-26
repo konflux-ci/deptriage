@@ -139,7 +139,7 @@ func (c *Client) ChecksAllPassed(ctx context.Context, prNumber int, excludeWorkf
 				continue
 			}
 			conclusion := cr.GetConclusion()
-			if conclusion != "success" && conclusion != "neutral" && conclusion != "skipped" {
+			if conclusion != "success" && conclusion != "neutral" && conclusion != "skipped" && conclusion != "cancelled" {
 				return false, nil
 			}
 		}
