@@ -75,3 +75,18 @@ The `action.yml` SHALL expose an `auto-merge` input, separate from the existing 
 #### Scenario: Permissions requirement
 - **WHEN** auto-merge is enabled
 - **THEN** the workflow MUST grant `contents: write` permission to the action (required by the GitHub merge API)
+
+### Requirement: Deferred merge via check_suite trigger
+The deptriage action typically finishes before other CI checks (lint, test, Konflux pipeline) complete. Because `ChecksAllPassed` sees pending checks at that point, the inline merge attempt is a no-op. To solve this timing issue, a separate lightweight workflow SHALL trigger on `check_suite: completed` events and attempt the merge when all checks are green.
+
+#### Scenario: Deferred merge after all checks complete
+- **WHEN** a check suite completes on a PR that has `approved` and `lgtm` labels, does NOT have `risk/high` label, was authored by a dependency bot, and all other CI checks are now passing
+- **THEN** the workflow SHALL merge the PR using squash merge
+
+#### Scenario: Not all checks complete yet
+- **WHEN** a check suite completes but other checks on the PR are still pending or failing
+- **THEN** the workflow SHALL skip the merge attempt (a subsequent `check_suite` event will retry)
+
+#### Scenario: Workflow self-exclusion
+- **WHEN** evaluating check status for merge eligibility
+- **THEN** the workflow SHALL exclude its own check from the evaluation to avoid circular dependency
