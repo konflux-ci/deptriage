@@ -36,8 +36,8 @@ jobs:
 
             echo "Checking PR #$number (author: $author, labels: $labels)"
 
-            # Only bot PRs
-            if [[ "$author" != "renovate[bot]" && "$author" != "red-hat-konflux[bot]" ]]; then
+            # Only bot PRs (gh CLI returns "app/<name>" format for GitHub Apps)
+            if [[ "$author" != "renovate[bot]" && "$author" != "red-hat-konflux[bot]" && "$author" != "app/renovate" && "$author" != "app/red-hat-konflux" ]]; then
               echo "  Skipping: not a dependency bot PR"
               continue
             fi
