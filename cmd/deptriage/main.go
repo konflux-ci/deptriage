@@ -26,6 +26,7 @@ import (
 
 	"github.com/konflux-ci/dep-impact-analysis-action/internal/analyze"
 	"github.com/konflux-ci/dep-impact-analysis-action/internal/classify"
+	"github.com/konflux-ci/dep-impact-analysis-action/internal/merge"
 )
 
 const (
@@ -75,9 +76,15 @@ var bothCmd = &cobra.Command{
 	RunE:  runBoth,
 }
 
+var mergeCmd = &cobra.Command{
+	Use:   "merge",
+	Short: "Merge eligible dependency PRs that have been approved and pass all checks",
+	RunE:  runMerge,
+}
+
 func init() {
 	// Shared flags with env var defaults for GitHub Actions
-	for _, cmd := range []*cobra.Command{classifyCmd, analyzeCmd, bothCmd} {
+	for _, cmd := range []*cobra.Command{classifyCmd, analyzeCmd, bothCmd, mergeCmd} {
 		cmd.Flags().IntVar(&prNumber, "pr-number", envInt("INPUT_PR_NUMBER", 0), "Pull request number")
 		cmd.Flags().StringVar(&repo, "repo", envStr("GITHUB_REPOSITORY", ""), "Repository in owner/name format")
 		cmd.Flags().StringVar(&githubToken, "github-token", envStr("INPUT_GITHUB_TOKEN", ""), "GitHub token for API operations")
@@ -99,7 +106,10 @@ func init() {
 	bothCmd.Flags().AddFlagSet(classifyCmd.Flags())
 	bothCmd.Flags().AddFlagSet(analyzeCmd.Flags())
 
-	rootCmd.AddCommand(classifyCmd, analyzeCmd, bothCmd)
+	// Merge-specific flags
+	mergeCmd.Flags().String("head-sha", envStr("INPUT_HEAD_SHA", ""), "Find and merge open PRs for this head SHA")
+
+	rootCmd.AddCommand(classifyCmd, analyzeCmd, bothCmd, mergeCmd)
 }
 
 func runClassify(cmd *cobra.Command, args []string) error {
@@ -156,6 +166,21 @@ func runBoth(cmd *cobra.Command, args []string) error {
 	}
 	_ = cmd.Flags().Set(flagClassifyOutput, outputFile)
 	return runAnalyze(cmd, args)
+}
+
+func runMerge(cmd *cobra.Command, args []string) error {
+	headSHA, _ := cmd.Flags().GetString("head-sha")
+
+	err := merge.Run(cmd.Context(), merge.Options{
+		PRNumber: prNumber,
+		HeadSHA:  headSHA,
+		Repo:     repo,
+		Token:    githubToken,
+	})
+	if err != nil {
+		slog.Warn("merge completed with warning", "error", err)
+	}
+	return nil
 }
 
 // writeGitHubOutput appends a key=value pair to $GITHUB_OUTPUT if running in GitHub Actions.

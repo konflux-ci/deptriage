@@ -76,17 +76,25 @@ The `action.yml` SHALL expose an `auto-merge` input, separate from the existing 
 - **WHEN** auto-merge is enabled
 - **THEN** the workflow MUST grant `contents: write` permission to the action (required by the GitHub merge API)
 
-### Requirement: Deferred merge via check_suite trigger
-The deptriage action typically finishes before other CI checks (lint, test, Konflux pipeline) complete. Because `ChecksAllPassed` sees pending checks at that point, the inline merge attempt is a no-op. To solve this timing issue, a separate lightweight workflow SHALL trigger on `check_suite: completed` events and attempt the merge when all checks are green.
+### Requirement: Standalone merge subcommand
+The deptriage binary SHALL provide a `merge` subcommand that can be invoked independently from the `analyze` phase. This enables deferred merge via a separate workflow triggered on `check_suite: completed`, solving the timing problem where the analyze phase finishes before other CI checks complete.
+
+#### Scenario: Merge subcommand with PR number
+- **WHEN** `deptriage merge --pr-number 28` is invoked
+- **THEN** the system SHALL evaluate the PR for merge eligibility (labels, checks, risk) and merge if eligible
+
+#### Scenario: Merge subcommand with head SHA
+- **WHEN** `deptriage merge --head-sha <sha>` is invoked
+- **THEN** the system SHALL find all open PRs matching that head SHA and evaluate each for merge eligibility
 
 #### Scenario: Deferred merge after all checks complete
-- **WHEN** a check suite completes on a PR that has `approved` and `lgtm` labels, does NOT have `risk/high` label, was authored by a dependency bot, and all other CI checks are now passing
-- **THEN** the workflow SHALL merge the PR using squash merge
+- **WHEN** a check suite completes, the auto-merge workflow invokes `deptriage merge` with the check suite's head SHA
+- **THEN** the system SHALL find the associated PR, verify labels and check status, and merge if all conditions are met
 
 #### Scenario: Not all checks complete yet
-- **WHEN** a check suite completes but other checks on the PR are still pending or failing
-- **THEN** the workflow SHALL skip the merge attempt (a subsequent `check_suite` event will retry)
+- **WHEN** the merge subcommand runs but other checks on the PR are still pending or failing
+- **THEN** the system SHALL skip the merge attempt (a subsequent `check_suite` event will retry)
 
 #### Scenario: Workflow self-exclusion
 - **WHEN** evaluating check status for merge eligibility
-- **THEN** the workflow SHALL exclude its own check from the evaluation to avoid circular dependency
+- **THEN** the system SHALL exclude the auto-merge workflow's own check from the evaluation to avoid circular dependency
