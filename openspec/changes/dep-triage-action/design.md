@@ -191,7 +191,7 @@ Scan all LLM output for potential secrets (API keys, tokens, credentials) using 
 
 ### 14. Formal PR review events
 
-When risk is LOW and all checks pass, submit an `APPROVE` review event (not just a comment). When risk is HIGH, submit a `REQUEST_CHANGES` event to block merge until a human reviews. MEDIUM risk posts a comment only. This integrates with GitHub's branch protection rules and required reviews.
+When risk is LOW and auto-approve is enabled, submit an `APPROVE` review event. For all other risk levels (MEDIUM, HIGH), submit a `COMMENT` review event. The AI risk assessment is informational — it signals risk via labels (`risk/high`, `risk/medium`) and review comments, but never uses `REQUEST_CHANGES` to block merge. This avoids situations where a bot review blocks merge even after a human engineer has reviewed and approved the change.
 
 **Alternatives considered:**
 - Comments only — doesn't integrate with branch protection
@@ -241,7 +241,7 @@ Two-tier system for getting dependency PRs merged:
 **Merge eligibility** is driven by deterministic signals, not the AI risk assessment:
 1. `approved` + `lgtm` labels are present (classify phase approved the PR)
 2. All CI checks pass (`success` or `neutral`, excluding the deptriage workflow itself)
-3. AI risk is NOT `high` (HIGH submits REQUEST_CHANGES, which is a hard block)
+3. `risk/high` label is NOT present (HIGH risk is signaled via label, not via review state)
 
 The AI risk level is informational — MEDIUM risk does NOT block merge. Experience shows that dependency updates (e.g., Tekton task digest bumps) flagged as MEDIUM are safe when CI checks pass. The Konflux pipeline is the real safety gate, not the AI assessment.
 

@@ -189,20 +189,13 @@ func tryMerge(ctx context.Context, client *ghclient.Client, opts Options) {
 }
 
 func submitReview(ctx context.Context, client *ghclient.Client, opts Options, risk types.RiskLevel, body string) {
-	switch risk {
-	case types.RiskHigh:
-		if err := client.SubmitReview(ctx, opts.PRNumber, "REQUEST_CHANGES", body); err != nil {
-			slog.Warn("failed to submit review", "event", "REQUEST_CHANGES", "error", err)
+	if risk == types.RiskLow && opts.AutoApprove {
+		if err := client.SubmitReview(ctx, opts.PRNumber, "APPROVE", body); err != nil {
+			slog.Warn("failed to submit review", "event", "APPROVE", "error", err)
 		}
-	case types.RiskLow:
-		if opts.AutoApprove {
-			if err := client.SubmitReview(ctx, opts.PRNumber, "APPROVE", body); err != nil {
-				slog.Warn("failed to submit review", "event", "APPROVE", "error", err)
-			}
-		}
-	case types.RiskMedium:
-		if err := client.SubmitReview(ctx, opts.PRNumber, "COMMENT", body); err != nil {
-			slog.Warn("failed to submit review", "event", "COMMENT", "error", err)
-		}
+		return
+	}
+	if err := client.SubmitReview(ctx, opts.PRNumber, "COMMENT", body); err != nil {
+		slog.Warn("failed to submit review", "event", "COMMENT", "error", err)
 	}
 }

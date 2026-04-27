@@ -39,17 +39,18 @@ The system SHALL post analysis results as PR comments. When a previous analysis 
 - **THEN** the system SHALL post a comment explaining the `GEMINI_API_KEY` (or equivalent) secret is not configured
 
 ### Requirement: Submit formal PR review events
-The system SHALL submit formal GitHub review events (APPROVE, REQUEST_CHANGES, COMMENT) based on the risk level, integrating with branch protection rules.
+The system SHALL submit formal GitHub review events (APPROVE or COMMENT) based on the risk level. The AI risk assessment is informational — it signals risk via labels and comments but never blocks merge via REQUEST_CHANGES. Merge eligibility is driven by deterministic signals (labels, CI status), not the AI assessment.
 
 #### Scenario: Low risk auto-approve
 - **WHEN** the risk level is `low`, the bump type is `patch`, there are no security advisories, and auto-approve is enabled
 - **THEN** the system SHALL submit an `APPROVE` review event
 
-#### Scenario: High risk request changes
+#### Scenario: High risk comment
 - **WHEN** the risk level is `high`
-- **THEN** the system SHALL submit a `REQUEST_CHANGES` review event with the analysis as the review body
+- **THEN** the system SHALL submit a `COMMENT` review event with the analysis as the review body
+- **AND** the `risk/high` label signals the risk level without blocking merge via review state
 
-#### Scenario: Medium risk comment only
+#### Scenario: Medium risk comment
 - **WHEN** the risk level is `medium`
 - **THEN** the system SHALL submit a `COMMENT` review event (does not block merge)
 
