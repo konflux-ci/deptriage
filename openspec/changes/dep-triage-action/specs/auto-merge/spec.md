@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Merge eligible PRs via GitHub API
-The system SHALL merge dependency PRs that have been approved by the classify phase and pass all CI checks, when auto-merge is enabled. The merge decision is driven by deterministic approval (labels) and CI status, not by the AI risk assessment. The AI risk level is informational — only HIGH risk blocks merge (via REQUEST_CHANGES review event).
+The system SHALL merge dependency PRs that have been approved by the classify phase and pass all CI checks, when auto-merge is enabled. The merge decision is driven by deterministic approval (labels) and CI status, not by the AI risk assessment. The AI risk level is informational — HIGH risk is signaled via the `risk/high` label and a COMMENT review, but does not block merge via review state.
 
 Merge eligibility requires ALL of the following:
 1. The `auto-merge` flag is enabled
@@ -22,7 +22,7 @@ Merge eligibility requires ALL of the following:
 #### Scenario: HIGH risk blocks merge
 - **WHEN** the AI risk level is `high`
 - **THEN** the system SHALL NOT attempt to merge the PR
-- **RATIONALE:** HIGH risk triggers a REQUEST_CHANGES review event, which is a hard block requiring human review.
+- **RATIONALE:** HIGH risk is signaled via the `risk/high` label; the merge subcommand skips PRs with this label. The review is a COMMENT, not REQUEST_CHANGES, so a human engineer can still merge manually if they determine the change is safe.
 
 #### Scenario: CI checks still pending
 - **WHEN** auto-merge is enabled and the PR is eligible, but one or more CI checks have status `pending` or `queued`
