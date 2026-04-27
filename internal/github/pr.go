@@ -106,6 +106,31 @@ func isNotFound(err error) bool {
 	return errors.As(err, &ghErr) && ghErr.Response != nil && ghErr.Response.StatusCode == http.StatusNotFound
 }
 
+// FindOpenPRsForSHA returns PR numbers for open PRs whose head SHA matches.
+func (c *Client) FindOpenPRsForSHA(ctx context.Context, sha string) ([]int, error) {
+	opts := &gh.PullRequestListOptions{
+		State:       "open",
+		ListOptions: gh.ListOptions{PerPage: 50},
+	}
+	var result []int
+	for {
+		prs, resp, err := c.inner.PullRequests.List(ctx, c.owner, c.repo, opts)
+		if err != nil {
+			return nil, fmt.Errorf("listing PRs: %w", err)
+		}
+		for _, pr := range prs {
+			if pr.GetHead().GetSHA() == sha {
+				result = append(result, pr.GetNumber())
+			}
+		}
+		if resp.NextPage == 0 {
+			break
+		}
+		opts.Page = resp.NextPage
+	}
+	return result, nil
+}
+
 // MergePR merges a pull request using the specified method (merge, squash, rebase).
 func (c *Client) MergePR(ctx context.Context, prNumber int, method string) error {
 	_, _, err := c.inner.PullRequests.Merge(ctx, c.owner, c.repo, prNumber, "", &gh.PullRequestOptions{

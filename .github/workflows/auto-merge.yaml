@@ -11,64 +11,11 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+      checks: read
     steps:
-      - name: Attempt merge for eligible PRs
-        env:
-          GH_TOKEN: ${{ github.token }}
-          HEAD_SHA: ${{ github.event.check_suite.head_sha }}
-        run: |
-          # Find open PRs associated with this check suite's head SHA
-          prs=$(gh pr list \
-            --repo "$GITHUB_REPOSITORY" \
-            --state open \
-            --json number,author,labels,headRefOid \
-            --jq ".[] | select(.headRefOid == \"$HEAD_SHA\")")
-
-          if [ -z "$prs" ]; then
-            echo "No open PRs found for SHA $HEAD_SHA"
-            exit 0
-          fi
-
-          echo "$prs" | jq -c '.' | while read -r pr; do
-            number=$(echo "$pr" | jq -r '.number')
-            author=$(echo "$pr" | jq -r '.author.login')
-            labels=$(echo "$pr" | jq -r '[.labels[].name] | join(",")')
-
-            echo "Checking PR #$number (author: $author, labels: $labels)"
-
-            # Only bot PRs (gh CLI returns "app/<name>" format for GitHub Apps)
-            if [[ "$author" != "renovate[bot]" && "$author" != "red-hat-konflux[bot]" && "$author" != "app/renovate" && "$author" != "app/red-hat-konflux" ]]; then
-              echo "  Skipping: not a dependency bot PR"
-              continue
-            fi
-
-            # Must have approved + lgtm labels
-            if [[ "$labels" != *"approved"* ]] || [[ "$labels" != *"lgtm"* ]]; then
-              echo "  Skipping: missing approved/lgtm labels"
-              continue
-            fi
-
-            # Must NOT have risk/high label
-            if [[ "$labels" == *"risk/high"* ]]; then
-              echo "  Skipping: risk/high label present"
-              continue
-            fi
-
-            # Check all CI checks pass (allow cancelled from concurrency groups)
-            failing=$(gh pr checks "$number" \
-              --repo "$GITHUB_REPOSITORY" \
-              --json name,state \
-              --jq '[.[] | select(.name != "Merge if all checks pass") | select(.state != "SUCCESS" and .state != "SKIPPED" and .state != "CANCELLED")] | length')
-
-            if [ "$failing" != "0" ]; then
-              echo "  Skipping: $failing check(s) not yet passing"
-              continue
-            fi
-
-            echo "  All conditions met — merging PR #$number"
-            if gh pr merge "$number" --repo "$GITHUB_REPOSITORY" --squash; then
-              echo "  PR #$number merged successfully"
-            else
-              echo "  Merge failed (may already be merged or have conflicts)"
-            fi
-          done
+      - uses: actions/checkout@v6
+      - uses: ./
+        with:
+          command: merge
+          pr-number: "0"
+          head-sha: ${{ github.event.check_suite.head_sha }}

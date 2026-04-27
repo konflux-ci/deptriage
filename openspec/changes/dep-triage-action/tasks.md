@@ -89,7 +89,10 @@
   - [ ] 12.6b Add `GetCheckStatus` method to `internal/github/pr.go` (combined status + check runs, self-exclusion)
   - [ ] 12.6c Add `auto-merge` input to `action.yml` and wire through CLI flags in `cmd/deptriage/main.go`
   - [ ] 12.6d Integrate merge step at end of `analyze.Run()` (eligibility: labels present + CI green + risk != HIGH)
-  - [ ] 12.6e Add unit tests for merge eligibility logic
+  - [ ] 12.6e Add `merge` subcommand to `cmd/deptriage/main.go` with `--head-sha` and `--pr-number` flags
+  - [ ] 12.6f Create `internal/merge/merge.go` with standalone merge orchestration (reuses github.Client methods)
+  - [ ] 12.6g Add `auto-merge.yaml` workflow triggered on `check_suite: completed` using the `merge` subcommand
+  - [ ] 12.6h Add unit tests for merge eligibility logic
 - [x] 12.7 Add unit tests for comment management (first post, update with collapse, truncation)
 
 ## 13. Analyze Orchestrator
