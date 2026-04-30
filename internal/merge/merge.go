@@ -19,8 +19,10 @@ package merge
 import (
 	"context"
 	"log/slog"
+	"strings"
 
 	ghclient "github.com/konflux-ci/dep-impact-analysis-action/internal/github"
+	"github.com/konflux-ci/dep-impact-analysis-action/internal/types"
 )
 
 const mergeCheckName = "Merge if all checks pass"
@@ -69,7 +71,22 @@ func isMergeEligible(labels []string) bool {
 	for _, l := range labels {
 		labelSet[l] = true
 	}
-	return labelSet["approved"] && labelSet["lgtm"] && !labelSet["risk/high"]
+	return labelSet[types.LabelApproved] && labelSet[types.LabelLGTM] && !labelSet[types.LabelRiskHigh]
+}
+
+// isDeferredApprovalEligible checks if the PR is eligible for deferred approval:
+// a patch bump with risk hints that wasn't auto-approved early, but can be
+// approved now that CI has proven the build is safe.
+func isDeferredApprovalEligible(labels []string) bool {
+	labelSet := make(map[string]bool, len(labels))
+	hasRiskHint := false
+	for _, l := range labels {
+		labelSet[l] = true
+		if strings.HasPrefix(l, types.RiskHintLabelPrefix) {
+			hasRiskHint = true
+		}
+	}
+	return labelSet[types.LabelSemverPatch] && hasRiskHint && !labelSet[types.LabelRiskHigh]
 }
 
 func tryMergePR(ctx context.Context, client *ghclient.Client, prNumber int) {
@@ -81,7 +98,27 @@ func tryMergePR(ctx context.Context, client *ghclient.Client, prNumber int) {
 		return
 	}
 
-	if !isMergeEligible(pr.Labels) {
+	eligible := isMergeEligible(pr.Labels)
+
+	if !eligible && isDeferredApprovalEligible(pr.Labels) {
+		allPassed, err := client.ChecksAllPassed(ctx, prNumber, mergeCheckName)
+		if err != nil {
+			slog.Warn("failed to check CI status for deferred approval", "pr", prNumber, "error", err)
+			return
+		}
+		if allPassed {
+			slog.Info("CI checks passed, granting deferred approval for patch with risk hints", "pr", prNumber)
+			for _, label := range []string{types.LabelApproved, types.LabelLGTM} {
+				if err := client.EnsureLabel(ctx, prNumber, label, types.ColorGreen, "Deferred approval: CI checks passed"); err != nil {
+					slog.Warn("failed to apply deferred approval label", "label", label, "error", err)
+					return
+				}
+			}
+			eligible = true
+		}
+	}
+
+	if !eligible {
 		slog.Info("skipping: labels do not meet merge criteria", "pr", prNumber, "labels", pr.Labels)
 		return
 	}

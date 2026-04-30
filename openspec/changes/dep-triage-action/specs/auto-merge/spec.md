@@ -43,9 +43,37 @@ Merge eligibility requires ALL of the following:
 - **RATIONALE:** Auto-approve is a prerequisite — without it, `approved`/`lgtm` labels will not be present, and the classify phase has not made an approval decision.
 
 #### Scenario: auto-approve labels not present
-- **WHEN** auto-merge is enabled, auto-approve is enabled, but the `approved` and `lgtm` labels are not present on the PR
+- **WHEN** auto-merge is enabled, auto-approve is enabled, but the `approved` and `lgtm` labels are not present on the PR, and the PR is not eligible for deferred approval
 - **THEN** the system SHALL NOT merge the PR
-- **RATIONALE:** The absence of labels means the classify phase determined the PR is not eligible for auto-approval (e.g., major/minor bump, gomod digest, risk hints detected).
+- **RATIONALE:** The absence of labels means the classify phase determined the PR is not eligible for auto-approval (e.g., major/minor bump, gomod digest).
+
+### Requirement: Deferred approval for patch bumps with risk hints
+The system SHALL grant deferred approval for patch bumps that were not auto-approved during classification due to risk hints, once all CI checks have passed. This enables safe auto-merge of updates like go-toolset rebuilds where the CI pipeline — not the risk hint — is the authoritative safety gate.
+
+Deferred approval eligibility requires ALL of the following:
+1. The `semver/patch` label is present (classify determined it's a patch bump)
+2. At least one `risk-hint/*` label is present (explains why early approval was skipped)
+3. The `risk/high` label is NOT present
+4. All CI checks on the PR have passed
+
+#### Scenario: Go-toolset patch bump with passing CI
+- **WHEN** a PR has labels `semver/patch` and `risk-hint/go-toolchain`, no `risk/high` label, and all CI checks pass
+- **THEN** the system SHALL apply `approved` and `lgtm` labels and merge the PR
+- **RATIONALE:** Go-toolset patch bumps (same minor version, different build ID) trigger risk hints because they could theoretically change the Go version. However, when the Konflux CI pipeline passes, the build is proven safe. The risk hint prevented premature approval before CI ran; once CI confirms safety, the merge can proceed.
+
+#### Scenario: Patch with risk hints but CI failing
+- **WHEN** a PR has labels `semver/patch` and `risk-hint/go-toolchain`, but CI checks are failing
+- **THEN** the system SHALL NOT grant deferred approval and SHALL NOT merge
+- **RATIONALE:** CI failure means the risk hint's concern was justified — the update may have broken the build.
+
+#### Scenario: Minor bump with risk hints not eligible for deferred approval
+- **WHEN** a PR has labels `semver/minor` and `risk-hint/go-toolchain`, and all CI checks pass
+- **THEN** the system SHALL NOT grant deferred approval
+- **RATIONALE:** Deferred approval is limited to patch bumps. Minor and major bumps require explicit human review.
+
+#### Scenario: Patch without risk hints uses normal auto-approve path
+- **WHEN** a PR has label `semver/patch` but no `risk-hint/*` labels
+- **THEN** the system SHALL NOT use deferred approval (the normal auto-approve path in classify should have already applied `approved`/`lgtm` labels)
 
 #### Scenario: PR has merge conflict
 - **WHEN** the system attempts to merge but the PR has a merge conflict

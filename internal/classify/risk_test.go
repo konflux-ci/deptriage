@@ -84,3 +84,68 @@ func TestDetectRiskHints(t *testing.T) {
 		})
 	}
 }
+
+func TestDetectRiskHintLabels(t *testing.T) {
+	tests := []struct {
+		name       string
+		title      string
+		body       string
+		wantLabels []string
+		wantEmpty  bool
+	}{
+		{
+			name:       "go-toolset triggers go-toolchain and container-image labels",
+			title:      "chore(deps): update registry.access.redhat.com/ubi10/go-toolset docker tag to v10.1-1777537854",
+			body:       "",
+			wantLabels: []string{"risk-hint/go-toolchain", "risk-hint/container-image"},
+		},
+		{
+			name:       "go version bump in body",
+			title:      "Update go.mod",
+			body:       "go 1.21 -> go 1.22",
+			wantLabels: []string{"risk-hint/go-version-bump"},
+		},
+		{
+			name:       "container image without go-toolset",
+			title:      "Update registry.access.redhat.com/ubi9 image",
+			body:       "",
+			wantLabels: []string{"risk-hint/container-image"},
+		},
+		{
+			name:      "no risk patterns",
+			title:     "Update github.com/stretchr/testify to v1.9.0",
+			body:      "Patch bump with bug fixes",
+			wantEmpty: true,
+		},
+		{
+			name:       "all hints triggered",
+			title:      "Update go-toolset Docker image",
+			body:       "go 1.21 -> go 1.22",
+			wantLabels: []string{"risk-hint/go-toolchain", "risk-hint/go-version-bump", "risk-hint/container-image"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := DetectRiskHintLabels(tt.title, tt.body)
+			if tt.wantEmpty {
+				if len(got) != 0 {
+					t.Errorf("expected no hints, got %d", len(got))
+				}
+				return
+			}
+			gotLabels := make(map[string]bool)
+			for _, h := range got {
+				gotLabels[h.Label] = true
+			}
+			for _, want := range tt.wantLabels {
+				if !gotLabels[want] {
+					t.Errorf("expected label %q, got labels %v", want, gotLabels)
+				}
+			}
+			if len(got) != len(tt.wantLabels) {
+				t.Errorf("expected %d hints, got %d", len(tt.wantLabels), len(got))
+			}
+		})
+	}
+}

@@ -16,6 +16,23 @@ limitations under the License.
 
 package types
 
+// Well-known label names used across classify, analyze, and merge phases.
+const (
+	LabelApproved  = "approved"
+	LabelLGTM      = "lgtm"
+	LabelRiskHigh  = "risk/high"
+	LabelSemverPatch = "semver/patch"
+
+	RiskHintLabelPrefix = "risk-hint/"
+)
+
+// Well-known label colors.
+const (
+	ColorGreen  = "0e8a16"
+	ColorYellow = "fbca04"
+	ColorRed    = "e11d48"
+)
+
 // BumpType represents a semver bump classification.
 type BumpType string
 
@@ -54,9 +71,9 @@ func DigestLabel(ecosystem string) string {
 // DigestLabelColor returns the label color for a digest bump based on ecosystem.
 func DigestLabelColor(ecosystem string) string {
 	if ecosystem == "gomod" {
-		return "fbca04" // yellow (minor)
+		return ColorYellow
 	}
-	return "0e8a16" // green (patch)
+	return ColorGreen
 }
 
 // Priority returns the bump severity for highest-wins comparison.
@@ -80,11 +97,11 @@ func (b BumpType) Priority() int {
 func (b BumpType) Color() string {
 	switch b {
 	case BumpPatch, BumpDigest:
-		return "0e8a16" // green
+		return ColorGreen
 	case BumpMinor:
-		return "fbca04" // yellow
+		return ColorYellow
 	case BumpMajor:
-		return "e11d48" // red
+		return ColorRed
 	default:
 		return ""
 	}
