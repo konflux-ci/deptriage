@@ -72,7 +72,7 @@ func Run(ctx context.Context, opts Options) (*types.ClassifyResult, error) {
 		slog.Warn("risk hints detected", "hint", strings.SplitN(riskHints, ":", 2)[0])
 	}
 	for _, hint := range riskHintLabels {
-		if err := client.EnsureLabel(ctx, opts.PRNumber, hint.Label, hint.Color, hint.Description); err != nil {
+		if err := client.EnsureLabel(ctx, opts.PRNumber, hint.Label, hint.Color, hint.LabelDesc); err != nil {
 			slog.Warn("failed to apply risk-hint label", "label", hint.Label, "error", err)
 		}
 	}
