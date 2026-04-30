@@ -75,3 +75,61 @@ func TestIsMergeEligible(t *testing.T) {
 		})
 	}
 }
+
+func TestIsDeferredApprovalEligible(t *testing.T) {
+	tests := []struct {
+		name   string
+		labels []string
+		want   bool
+	}{
+		{
+			name:   "patch with go-toolchain risk hint",
+			labels: []string{"semver/patch", "risk-hint/go-toolchain"},
+			want:   true,
+		},
+		{
+			name:   "patch with multiple risk hints",
+			labels: []string{"semver/patch", "risk-hint/go-toolchain", "risk-hint/container-image"},
+			want:   true,
+		},
+		{
+			name:   "patch with risk hint and medium risk",
+			labels: []string{"semver/patch", "risk-hint/go-toolchain", "risk/medium"},
+			want:   true,
+		},
+		{
+			name:   "patch with risk hint but risk/high blocks",
+			labels: []string{"semver/patch", "risk-hint/go-toolchain", "risk/high"},
+			want:   false,
+		},
+		{
+			name:   "minor bump with risk hint not eligible",
+			labels: []string{"semver/minor", "risk-hint/go-toolchain"},
+			want:   false,
+		},
+		{
+			name:   "patch without risk hint not eligible",
+			labels: []string{"semver/patch"},
+			want:   false,
+		},
+		{
+			name:   "no labels",
+			labels: []string{},
+			want:   false,
+		},
+		{
+			name:   "already approved not reached",
+			labels: []string{"semver/patch", "risk-hint/go-toolchain", "approved", "lgtm"},
+			want:   true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isDeferredApprovalEligible(tt.labels)
+			if got != tt.want {
+				t.Errorf("isDeferredApprovalEligible(%v) = %v, want %v", tt.labels, got, tt.want)
+			}
+		})
+	}
+}

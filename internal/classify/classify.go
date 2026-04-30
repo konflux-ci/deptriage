@@ -38,7 +38,6 @@ type Options struct {
 	AutoApprove bool
 }
 
-
 // Run executes the full classification pipeline.
 func Run(ctx context.Context, opts Options) (*types.ClassifyResult, error) {
 	client := ghclient.NewClient(ctx, opts.Token, opts.Repo)
@@ -66,10 +65,16 @@ func Run(ctx context.Context, opts Options) (*types.ClassifyResult, error) {
 	}
 	slog.Info("extracted packages", "count", len(packages))
 
-	// Detect risk hints
+	// Detect risk hints and apply risk-hint labels
+	riskHintLabels := DetectRiskHintLabels(pr.Title, pr.Body)
 	riskHints := DetectRiskHints(pr.Title, pr.Body)
 	if riskHints != "" {
 		slog.Warn("risk hints detected", "hint", strings.SplitN(riskHints, ":", 2)[0])
+	}
+	for _, hint := range riskHintLabels {
+		if err := client.EnsureLabel(ctx, opts.PRNumber, hint.Label, hint.Color, hint.Description); err != nil {
+			slog.Warn("failed to apply risk-hint label", "label", hint.Label, "error", err)
+		}
 	}
 
 	// Determine the dominant ecosystem across all packages
@@ -118,8 +123,8 @@ func Run(ctx context.Context, opts Options) (*types.ClassifyResult, error) {
 		(bumpType == types.BumpDigest && ecosystem != "gomod")
 	if opts.AutoApprove && isAutoApproveEligible && riskHints == "" {
 		slog.Info("applying auto-approve labels for eligible PR")
-		for _, label := range []string{"approved", "lgtm"} {
-			if err := client.EnsureLabel(ctx, opts.PRNumber, label, "0e8a16", "Auto-approved dependency update"); err != nil {
+		for _, label := range []string{types.LabelApproved, types.LabelLGTM} {
+			if err := client.EnsureLabel(ctx, opts.PRNumber, label, types.ColorGreen, "Auto-approved dependency update"); err != nil {
 				slog.Warn("failed to apply auto-approve label", "label", label, "error", err)
 			}
 		}

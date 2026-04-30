@@ -140,9 +140,9 @@ func applyRiskLabel(ctx context.Context, client *ghclient.Client, prNumber int, 
 	}
 
 	colors := map[types.RiskLevel]string{
-		types.RiskLow:    "0e8a16",
-		types.RiskMedium: "fbca04",
-		types.RiskHigh:   "e11d48",
+		types.RiskLow:    types.ColorGreen,
+		types.RiskMedium: types.ColorYellow,
+		types.RiskHigh:   types.ColorRed,
 	}
 
 	labelName := fmt.Sprintf("risk/%s", risk)
@@ -160,7 +160,7 @@ func shouldAttemptMerge(autoMerge, autoApprove bool, risk types.RiskLevel) bool 
 const deptriageCheckName = "Triage dependency PR"
 
 func tryMerge(ctx context.Context, client *ghclient.Client, opts Options) {
-	hasLabels, err := client.HasLabels(ctx, opts.PRNumber, []string{"approved", "lgtm"})
+	hasLabels, err := client.HasLabels(ctx, opts.PRNumber, []string{types.LabelApproved, types.LabelLGTM})
 	if err != nil {
 		slog.Warn("failed to check PR labels for auto-merge", "error", err)
 		return

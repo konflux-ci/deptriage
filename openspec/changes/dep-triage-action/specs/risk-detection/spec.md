@@ -33,6 +33,22 @@ The system SHALL detect container/base image updates in the PR title.
 - **WHEN** the PR title is `Update github.com/stretchr/testify to v1.9.0`
 - **THEN** the system SHALL NOT add any container-related risk hint
 
+### Requirement: Apply risk-hint labels to PRs
+The system SHALL apply a GitHub label for each detected risk hint, making risk detection results visible on the PR and available to the merge phase for deferred approval decisions.
+
+Label mapping:
+- `GO_TOOLCHAIN_UPDATE` → `risk-hint/go-toolchain` (color: `fbca04`)
+- `GO_VERSION_BUMP` → `risk-hint/go-version-bump` (color: `fbca04`)
+- `CONTAINER_IMAGE_UPDATE` → `risk-hint/container-image` (color: `fbca04`)
+
+#### Scenario: Risk-hint labels applied for go-toolset update
+- **WHEN** the PR title matches `go-toolset` and `docker`
+- **THEN** the system SHALL apply labels `risk-hint/go-toolchain` and `risk-hint/container-image`
+
+#### Scenario: No risk-hint labels for non-risky PR
+- **WHEN** no high-risk patterns are detected
+- **THEN** the system SHALL NOT apply any `risk-hint/*` labels
+
 ### Requirement: Aggregate risk hints as structured output
 The system SHALL collect all detected risk hints into a single string field, with each hint on its own line, for inclusion in the LLM context.
 
