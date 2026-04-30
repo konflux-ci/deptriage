@@ -28,7 +28,8 @@ type RiskHint struct {
 	Key         string // e.g. "GO_TOOLCHAIN_UPDATE"
 	Label       string // GitHub label name, e.g. "risk-hint/go-toolchain"
 	Color       string // Label color hex
-	Description string // Human-readable explanation for the LLM prompt
+	LabelDesc   string // Short description for the GitHub label (max 100 chars)
+	Description string // Full explanation for the LLM prompt
 }
 
 
@@ -43,6 +44,7 @@ var (
 		key         string
 		label       string
 		color       string
+		labelDesc   string
 		description string
 	}{
 		{
@@ -51,6 +53,7 @@ var (
 			key:        "GO_TOOLCHAIN_UPDATE",
 			label:      "risk-hint/go-toolchain",
 			color:      types.ColorYellow,
+			labelDesc:  "Go build toolchain image update — may affect build infrastructure",
 			description: "This PR updates the Go build toolchain image. " +
 				"This often requires coordinated changes to the build pipeline and can cause build failures " +
 				"if the new Go version is incompatible with the current build infrastructure. " +
@@ -62,6 +65,7 @@ var (
 			key:        "GO_VERSION_BUMP",
 			label:      "risk-hint/go-version-bump",
 			color:      types.ColorYellow,
+			labelDesc:  "Go version directive change — may require matching CI toolchain",
 			description: "The Go language version directive in go.mod may be changing. " +
 				"This can introduce new language features that require a matching Go toolchain version in CI, " +
 				"and may break builds if the CI build image uses an older Go version.",
@@ -72,6 +76,7 @@ var (
 			key:        "CONTAINER_IMAGE_UPDATE",
 			label:      "risk-hint/container-image",
 			color:      types.ColorYellow,
+			labelDesc:  "Container base image update — may affect build behavior",
 			description: "This PR updates a container base image. " +
 				"Base image changes can affect build behavior, available system libraries, and binary compatibility.",
 		},
@@ -102,6 +107,7 @@ func DetectRiskHintLabels(title, body string) []RiskHint {
 				Key:         def.key,
 				Label:       def.label,
 				Color:       def.color,
+				LabelDesc:   def.labelDesc,
 				Description: def.description,
 			})
 		}
