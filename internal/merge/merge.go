@@ -134,6 +134,10 @@ func tryMergePR(ctx context.Context, client *ghclient.Client, prNumber int) {
 	}
 
 	slog.Info("all merge conditions met, merging PR", "pr", prNumber)
+	if err := client.SubmitReview(ctx, prNumber, "APPROVE", "All merge conditions met — auto-approved by deptriage."); err != nil {
+		slog.Warn("failed to submit approval review", "pr", prNumber, "error", err)
+		return
+	}
 	if err := client.MergePR(ctx, prNumber, "squash"); err != nil {
 		slog.Warn("auto-merge failed", "pr", prNumber, "error", err)
 		return
