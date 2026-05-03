@@ -9,8 +9,9 @@ inputs:
     required: true
     default: "both"
   pr-number:
-    description: "Pull request number"
-    required: true
+    description: "Pull request number (not required for merge command with head-sha)"
+    required: false
+    default: "0"
   github-token:
     description: "GitHub token for API operations"
     required: true
