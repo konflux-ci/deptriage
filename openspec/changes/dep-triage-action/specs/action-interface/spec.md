@@ -6,13 +6,15 @@ The system SHALL provide an `action.yml` file defining a Docker container action
 #### Scenario: Action inputs defined
 - **WHEN** a consumer workflow references the action
 - **THEN** the following inputs SHALL be available:
-  - `command` (required): one of `classify`, `analyze`, or `both`
-  - `pr-number` (required): the pull request number to analyze
-  - `api-key` (optional): LLM provider API key
+  - `command` (required): one of `classify`, `analyze`, `both`, or `merge`
+  - `pr-number` (optional, default: `0`): the pull request number to analyze (not needed for `merge` command when using `head-sha`)
+  - `api-key` (optional): LLM provider API key (not needed for `merge` command)
   - `llm-provider` (optional, default: `gemini`): LLM provider name
   - `llm-model` (optional): specific model to use (provider-dependent default)
   - `auto-approve` (optional, default: `false`): enable applying `approved`/`lgtm` labels and formal APPROVE review for eligible low-risk patches
-  - `github-token` (required): GitHub token for API operations
+  - `auto-merge` (optional, default: `false`): enable auto-merging eligible PRs after analysis when auto-approve labels are present and CI checks pass
+  - `head-sha` (optional): commit SHA to find associated PRs for merge (used with `merge` command in `check_suite` workflows)
+  - `github-token` (required): GitHub token for API operations. For the `merge` command, a GitHub App token is recommended to satisfy branch rulesets requiring approval from a different identity than the PR pusher
 
 #### Scenario: Action outputs defined
 - **WHEN** the action completes successfully
@@ -46,6 +48,11 @@ The system SHALL support running classify alone, analyze alone, or both in seque
 #### Scenario: Command is both
 - **WHEN** `command` is set to `both`
 - **THEN** the system SHALL run classify first, then analyze, passing the classify output to analyze automatically
+
+#### Scenario: Command is merge
+- **WHEN** `command` is set to `merge`
+- **THEN** the system SHALL evaluate eligible PRs for merge without running classify or analyze
+- **AND** use `head-sha` to find associated PRs if `pr-number` is `0`
 
 #### Scenario: Analyze without prior classify output
 - **WHEN** `command` is `analyze` and no classify output file exists
