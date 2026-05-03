@@ -104,6 +104,24 @@ The `action.yml` SHALL expose an `auto-merge` input, separate from the existing 
 - **WHEN** auto-merge is enabled
 - **THEN** the workflow MUST grant `contents: write` permission to the action (required by the GitHub merge API)
 
+### Requirement: Submit APPROVE review before merging
+The merge subcommand SHALL submit a formal `APPROVE` review on the PR before calling the merge API. This satisfies GitHub branch rulesets that require "approval from someone other than the last pusher." The review is submitted using the configured `github-token`, which should be a GitHub App token representing a different identity from the PR author (e.g., `renovate[bot]` or `red-hat-konflux[bot]`).
+
+#### Scenario: APPROVE review submitted before merge
+- **WHEN** the merge subcommand determines a PR is eligible for merge (labels, checks, risk all pass)
+- **THEN** the system SHALL submit an `APPROVE` review event before calling the merge API
+- **AND** the review body SHALL indicate it was auto-approved by deptriage
+
+#### Scenario: APPROVE review fails
+- **WHEN** the system attempts to submit an APPROVE review but the GitHub API returns an error
+- **THEN** the system SHALL log a warning and NOT attempt the merge
+- **RATIONALE:** Without the approval, the merge will fail due to branch ruleset requirements. Failing early avoids a redundant merge API call.
+
+#### Scenario: GitHub App token identity
+- **WHEN** the auto-merge workflow is configured with a GitHub App token
+- **THEN** the APPROVE review SHALL be attributed to the app identity, which is distinct from the PR pusher
+- **RATIONALE:** Branch rulesets require approval from someone other than the last pusher. Using a GitHub App token (not the default `GITHUB_TOKEN`) ensures the approval comes from a different identity without requiring the app to bypass branch protections entirely.
+
 ### Requirement: Standalone merge subcommand
 The deptriage binary SHALL provide a `merge` subcommand that can be invoked independently from the `analyze` phase. This enables deferred merge via a separate workflow triggered on `check_suite: completed`, solving the timing problem where the analyze phase finishes before other CI checks complete.
 
