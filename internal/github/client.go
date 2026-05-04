@@ -27,6 +27,7 @@ import (
 // Client wraps the GitHub API client.
 type Client struct {
 	inner *gh.Client
+	token string
 	owner string
 	repo  string
 }
@@ -40,6 +41,7 @@ func NewClient(ctx context.Context, token, repoFullName string) *Client {
 	owner, repo := splitRepo(repoFullName)
 	return &Client{
 		inner: client,
+		token: token,
 		owner: owner,
 		repo:  repo,
 	}

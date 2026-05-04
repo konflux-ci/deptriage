@@ -18,6 +18,7 @@ package merge
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"strings"
 
@@ -139,6 +140,15 @@ func tryMergePR(ctx context.Context, client *ghclient.Client, prNumber int) {
 		return
 	}
 	if err := client.MergePR(ctx, prNumber, "squash"); err != nil {
+		if errors.Is(err, ghclient.ErrMergeQueueRequired) {
+			slog.Info("merge queue detected, enqueuing PR", "pr", prNumber)
+			if err := client.EnqueuePR(ctx, pr.NodeID); err != nil {
+				slog.Warn("enqueue failed", "pr", prNumber, "error", err)
+			} else {
+				slog.Info("PR enqueued successfully", "pr", prNumber)
+			}
+			return
+		}
 		slog.Warn("auto-merge failed", "pr", prNumber, "error", err)
 		return
 	}

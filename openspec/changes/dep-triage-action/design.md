@@ -258,3 +258,16 @@ The merge step runs at the end of the analyze phase and follows the same gracefu
 - Poll-and-wait in the action — ties up a runner for minutes; wasteful and fragile.
 - Bypass branch protections for the app — overly broad; bypasses ALL protections, not just the "last pusher" rule. Security risk if app credentials leak.
 - Use `GITHUB_TOKEN` for the approval — `github-actions[bot]` may be treated as the same identity context depending on the ruleset configuration. A dedicated GitHub App provides a cleaner identity separation.
+
+### 17. Merge queue support: fallback-based detection with GraphQL enqueue
+
+Some Konflux repos use GitHub merge queues, which reject direct `PullRequests.Merge()` calls with a 405 error. Rather than requiring per-repo configuration or probing repo settings upfront, deptriage uses a **fallback strategy**: attempt the direct merge first, and if a 405 indicates a merge queue is required, retry via the GraphQL `enqueuePullRequest` mutation.
+
+The `google/go-github` v85 library has merge queue data structures (`MergeGroup`, `MergeQueueRuleParameters`) but does not expose enqueue service methods. A lightweight GraphQL call using the existing `github-token` is sufficient — no additional client library is needed. The PR's node ID (required by the mutation) is available from the REST API response (`PullRequest.GetNodeID()`).
+
+The APPROVE review step remains unchanged — merge queues still enforce approval requirements before a PR can be enqueued. The "always exit 0" semantics also apply: enqueue failures are logged as warnings.
+
+**Alternatives considered:**
+- Detect merge queue upfront via repo settings API — adds an extra API call on every run; the fallback approach is zero-cost when merge queues are not in use.
+- Add a `--use-merge-queue` flag — requires per-repo configuration and workflow changes; the fallback approach is transparent.
+- Use `enablePullRequestAutoMerge` GraphQL mutation — tells GitHub to merge when checks pass, but deptriage already handles check evaluation; adding another layer of "wait for checks" is redundant and harder to reason about.
