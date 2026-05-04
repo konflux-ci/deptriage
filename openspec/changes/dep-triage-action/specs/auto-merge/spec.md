@@ -144,3 +144,48 @@ The deptriage binary SHALL provide a `merge` subcommand that can be invoked inde
 #### Scenario: Workflow self-exclusion
 - **WHEN** evaluating check status for merge eligibility
 - **THEN** the system SHALL exclude the auto-merge workflow's own check from the evaluation to avoid circular dependency
+
+### Requirement: Merge queue support
+The system SHALL support repositories that use GitHub merge queues. When a repository requires PRs to go through a merge queue, the system SHALL enqueue the PR instead of merging directly. The triage, classification, approval, and eligibility logic remain unchanged — only the final merge step adapts.
+
+#### Scenario: Repository uses merge queue — enqueue instead of merge
+- **WHEN** the system attempts to merge a PR and the repository has a merge queue enabled
+- **THEN** the system SHALL enqueue the PR via the GitHub GraphQL `enqueuePullRequest` mutation instead of calling the REST merge endpoint
+- **RATIONALE:** Repositories with merge queues reject direct `PullRequests.Merge()` calls with a 405 error. The enqueue mutation adds the PR to the queue, and GitHub handles the actual merge when the queue processes it.
+
+#### Scenario: Detect merge queue via API error fallback
+- **WHEN** the system calls `PullRequests.Merge()` and receives a 405 error indicating a merge queue is required
+- **THEN** the system SHALL retry by enqueuing the PR via the GraphQL mutation
+- **AND** log that merge queue was detected for this repository
+- **RATIONALE:** Detecting merge queue configuration upfront requires additional API calls. Falling back on the 405 error is simpler and handles the case transparently without requiring per-repo configuration.
+
+#### Scenario: APPROVE review before enqueue
+- **WHEN** the system enqueues a PR into the merge queue
+- **THEN** the system SHALL still submit an `APPROVE` review before enqueuing
+- **RATIONALE:** Merge queues still require approval prerequisites to be satisfied before a PR can be enqueued. The APPROVE review from the GitHub App token satisfies the "approval from someone other than the last pusher" ruleset.
+
+#### Scenario: Enqueue succeeds
+- **WHEN** the PR is successfully enqueued
+- **THEN** the system SHALL log the enqueue as successful
+- **AND** the system SHALL NOT attempt a direct merge
+
+#### Scenario: Enqueue fails
+- **WHEN** the GraphQL enqueue mutation returns an error
+- **THEN** the system SHALL log the error as a warning and NOT fail the action
+- **RATIONALE:** Consistent with the "always exit 0" semantics. Enqueue is best-effort, same as direct merge.
+
+#### Scenario: PR already in merge queue
+- **WHEN** the system attempts to enqueue a PR that is already in the merge queue
+- **THEN** the system SHALL log that the PR is already queued and treat it as a no-op
+
+### Requirement: GraphQL client for merge queue operations
+The system SHALL use the GitHub GraphQL API for merge queue operations, since the `google/go-github` v85 REST client does not expose merge queue enqueue methods.
+
+#### Scenario: GraphQL enqueuePullRequest mutation
+- **WHEN** the system needs to enqueue a PR
+- **THEN** the system SHALL execute the `enqueuePullRequest` GraphQL mutation with the PR's node ID
+- **AND** use the same `github-token` used for other API operations
+
+#### Scenario: Resolve PR node ID
+- **WHEN** the system needs the PR's GraphQL node ID for the enqueue mutation
+- **THEN** the system SHALL obtain it from the PR data already fetched via the REST API (`PullRequest.GetNodeID()`)

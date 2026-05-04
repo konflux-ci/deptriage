@@ -17,17 +17,25 @@ limitations under the License.
 package github
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
+	"strings"
 
 	gh "github.com/google/go-github/v85/github"
 )
 
+// ErrMergeQueueRequired indicates the repository requires PRs to go through a merge queue.
+var ErrMergeQueueRequired = errors.New("merge queue required")
+
 // PRData holds the metadata fetched from a pull request.
 type PRData struct {
 	Number  int
+	NodeID  string
 	Title   string
 	Body    string
 	Author  string
@@ -50,6 +58,7 @@ func (c *Client) FetchPR(ctx context.Context, number int) (*PRData, error) {
 
 	return &PRData{
 		Number:  number,
+		NodeID:  pr.GetNodeID(),
 		Title:   pr.GetTitle(),
 		Body:    pr.GetBody(),
 		Author:  pr.GetUser().GetLogin(),
@@ -132,13 +141,78 @@ func (c *Client) FindOpenPRsForSHA(ctx context.Context, sha string) ([]int, erro
 }
 
 // MergePR merges a pull request using the specified method (merge, squash, rebase).
+// Returns ErrMergeQueueRequired if the repository requires PRs to go through a merge queue.
 func (c *Client) MergePR(ctx context.Context, prNumber int, method string) error {
 	_, _, err := c.inner.PullRequests.Merge(ctx, c.owner, c.repo, prNumber, "", &gh.PullRequestOptions{
 		MergeMethod: method,
 	})
 	if err != nil {
+		if isMergeQueueError(err) {
+			return fmt.Errorf("merging PR #%d: %w", prNumber, ErrMergeQueueRequired)
+		}
 		return fmt.Errorf("merging PR #%d: %w", prNumber, err)
 	}
+	return nil
+}
+
+func isMergeQueueError(err error) bool {
+	var ghErr *gh.ErrorResponse
+	if errors.As(err, &ghErr) && ghErr.Response != nil && ghErr.Response.StatusCode == http.StatusMethodNotAllowed {
+		return strings.Contains(ghErr.Message, "merge queue") ||
+			strings.Contains(strings.ToLower(ghErr.Message), "queue")
+	}
+	return false
+}
+
+// EnqueuePR adds a pull request to the repository's merge queue via the GraphQL API.
+func (c *Client) EnqueuePR(ctx context.Context, prNodeID string) error {
+	query := `mutation($prID: ID!) {
+		enqueuePullRequest(input: {pullRequestId: $prID}) {
+			mergeQueueEntry {
+				id
+			}
+		}
+	}`
+
+	payload := map[string]any{
+		"query":     query,
+		"variables": map[string]string{"prID": prNodeID},
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("marshaling GraphQL request: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://api.github.com/graphql", bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("creating GraphQL request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+c.token)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("executing GraphQL request: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("reading GraphQL response: %w", err)
+	}
+
+	var result struct {
+		Errors []struct {
+			Message string `json:"message"`
+		} `json:"errors"`
+	}
+	if err := json.Unmarshal(respBody, &result); err != nil {
+		return fmt.Errorf("parsing GraphQL response: %w", err)
+	}
+	if len(result.Errors) > 0 {
+		return fmt.Errorf("enqueuing PR: %s", result.Errors[0].Message)
+	}
+
 	return nil
 }
 
