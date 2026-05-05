@@ -20,7 +20,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/konflux-ci/dep-impact-analysis-action/internal/types"
+	"github.com/konflux-ci/deptriage/internal/types"
 )
 
 // goModuleDomainRe matches Go module hosting domains to detect gomod ecosystem

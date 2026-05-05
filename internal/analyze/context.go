@@ -21,10 +21,10 @@ import (
 	"encoding/json"
 	"log/slog"
 
-	ghclient "github.com/konflux-ci/dep-impact-analysis-action/internal/github"
-	"github.com/konflux-ci/dep-impact-analysis-action/internal/imports"
-	"github.com/konflux-ci/dep-impact-analysis-action/internal/security"
-	"github.com/konflux-ci/dep-impact-analysis-action/internal/types"
+	ghclient "github.com/konflux-ci/deptriage/internal/github"
+	"github.com/konflux-ci/deptriage/internal/imports"
+	"github.com/konflux-ci/deptriage/internal/security"
+	"github.com/konflux-ci/deptriage/internal/types"
 
 	gh "github.com/google/go-github/v85/github"
 )
@@ -37,6 +37,19 @@ func GatherContext(ctx context.Context, result *types.ClassifyResult, ghClient *
 	}
 
 	goAvailable := imports.GoAvailable(workDir)
+
+	var scanByPkg map[string][]types.ImportInfo
+	if goAvailable && len(result.Packages) > 0 {
+		names := make([]string, len(result.Packages))
+		for i, p := range result.Packages {
+			names[i] = p.Name
+		}
+		var err error
+		scanByPkg, err = imports.ScanImportsForPackages(workDir, names)
+		if err != nil {
+			slog.Warn("import scanning failed", "error", err)
+		}
+	}
 
 	for _, pkg := range result.Packages {
 		pkgCtx := types.PackageContext{
@@ -56,11 +69,11 @@ func GatherContext(ctx context.Context, result *types.ClassifyResult, ghClient *
 			}
 		}
 
-		// Source file scanning
+		// Source file scanning (single repo walk for all packages)
 		if goAvailable {
-			importInfos, err := imports.ScanImports(workDir, pkg.Name)
-			if err != nil {
-				slog.Warn("import scanning failed", "package", pkg.Name, "error", err)
+			var importInfos []types.ImportInfo
+			if scanByPkg != nil {
+				importInfos = scanByPkg[pkg.Name]
 			}
 			if len(importInfos) == 0 {
 				pkgCtx.NoDirectImports = true

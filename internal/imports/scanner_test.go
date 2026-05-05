@@ -100,6 +100,70 @@ func main() { fmt.Println("hello") }
 	}
 }
 
+func TestScanImportsForPackages_MultiPackage(t *testing.T) {
+	dir := t.TempDir()
+	pkgA := "github.com/foo/bar"
+	pkgB := "github.com/baz/qux"
+
+	writeTestFile(t, filepath.Join(dir, "a.go"), `package main
+
+import (
+	"`+pkgA+`"
+	"`+pkgB+`"
+)
+
+func main() {
+	bar.Do()
+	qux.Do()
+}
+`)
+
+	writeTestFile(t, filepath.Join(dir, "b.go"), `package main
+
+import "`+pkgA+`"
+
+func onlyA() {}
+`)
+
+	m, err := ScanImportsForPackages(dir, []string{pkgA, pkgB})
+	if err != nil {
+		t.Fatalf("ScanImportsForPackages() error: %v", err)
+	}
+	if len(m[pkgA]) != 2 {
+		t.Fatalf("pkgA: want 2 files, got %d", len(m[pkgA]))
+	}
+	if len(m[pkgB]) != 1 {
+		t.Fatalf("pkgB: want 1 file, got %d", len(m[pkgB]))
+	}
+
+	single, err := ScanImports(dir, pkgA)
+	if err != nil {
+		t.Fatalf("ScanImports() error: %v", err)
+	}
+	if len(single) != len(m[pkgA]) {
+		t.Fatalf("ScanImports vs ScanImportsForPackages mismatch: %d vs %d", len(single), len(m[pkgA]))
+	}
+}
+
+func TestScanImportsForPackages_Dedupe(t *testing.T) {
+	dir := t.TempDir()
+	pkg := "github.com/foo/bar"
+	writeTestFile(t, filepath.Join(dir, "main.go"), `package main
+
+import "`+pkg+`"
+
+func main() {}
+`)
+
+	m, err := ScanImportsForPackages(dir, []string{pkg, pkg, pkg})
+	if err != nil {
+		t.Fatalf("ScanImportsForPackages() error: %v", err)
+	}
+	if len(m[pkg]) != 1 {
+		t.Fatalf("deduped names should yield one hit, got %d", len(m[pkg]))
+	}
+}
+
 func writeTestFile(t *testing.T, path, content string) {
 	t.Helper()
 	if err := os.WriteFile(path, []byte(content), 0644); err != nil {

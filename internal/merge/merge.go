@@ -22,8 +22,8 @@ import (
 	"log/slog"
 	"strings"
 
-	ghclient "github.com/konflux-ci/dep-impact-analysis-action/internal/github"
-	"github.com/konflux-ci/dep-impact-analysis-action/internal/types"
+	ghclient "github.com/konflux-ci/deptriage/internal/github"
+	"github.com/konflux-ci/deptriage/internal/types"
 )
 
 const mergeCheckName = "Merge if all checks pass"

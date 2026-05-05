@@ -25,7 +25,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/konflux-ci/dep-impact-analysis-action/internal/types"
+	"github.com/konflux-ci/deptriage/internal/types"
 )
 
 const govulncheckTimeout = 300 * time.Second

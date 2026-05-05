@@ -24,9 +24,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/konflux-ci/dep-impact-analysis-action/internal/analyze"
-	"github.com/konflux-ci/dep-impact-analysis-action/internal/classify"
-	"github.com/konflux-ci/dep-impact-analysis-action/internal/merge"
+	"github.com/konflux-ci/deptriage/internal/analyze"
+	"github.com/konflux-ci/deptriage/internal/classify"
+	"github.com/konflux-ci/deptriage/internal/merge"
 )
 
 const (

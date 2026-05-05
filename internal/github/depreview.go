@@ -22,7 +22,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/konflux-ci/dep-impact-analysis-action/internal/types"
+	"github.com/konflux-ci/deptriage/internal/types"
 )
 
 const depReviewTimeout = 30 * time.Second

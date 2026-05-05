@@ -23,10 +23,10 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/konflux-ci/dep-impact-analysis-action/internal/analyze/provider"
-	ghclient "github.com/konflux-ci/dep-impact-analysis-action/internal/github"
-	"github.com/konflux-ci/dep-impact-analysis-action/internal/security"
-	"github.com/konflux-ci/dep-impact-analysis-action/internal/types"
+	"github.com/konflux-ci/deptriage/internal/analyze/provider"
+	ghclient "github.com/konflux-ci/deptriage/internal/github"
+	"github.com/konflux-ci/deptriage/internal/security"
+	"github.com/konflux-ci/deptriage/internal/types"
 
 	gh "github.com/google/go-github/v85/github"
 	"golang.org/x/oauth2"
