@@ -1,0 +1,80 @@
+# Example workflows showing recommended usage of deptriage action.
+# Copy both workflow definitions below into separate files in your repo's
+# .github/workflows/ directory and configure the required secrets:
+#
+#   GEMINI_API_KEY                          — for AI risk analysis
+#   KONFLUX_INFRA_AUTO_MERGER_APP_ID        — GitHub App ID for merge identity
+#   KONFLUX_INFRA_AUTO_MERGER_APP_PRIVATE_KEY — GitHub App private key
+#
+# ─── File 1: dep-triage.yaml ─────────────────────────────────────────────────
+#
+# Triggers on dependency PRs from Renovate/MintMaker. Classifies the bump type,
+# runs AI-assisted risk analysis, applies labels, and auto-approves eligible PRs.
+
+name: Dependency Impact Analysis
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+concurrency:
+  group: dep-triage-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  triage:
+    name: Triage dependency PR
+    if: >-
+      github.event.pull_request.user.login == 'renovate[bot]' ||
+      github.event.pull_request.user.login == 'red-hat-konflux[bot]'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      checks: read
+      statuses: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: konflux-ci/deptriage@main
+        with:
+          command: both
+          pr-number: ${{ github.event.pull_request.number }}
+          api-key: ${{ secrets.GEMINI_API_KEY }}
+          llm-provider: gemini
+          auto-approve: 'true'
+          auto-merge: 'true'
+
+# ─── File 2: auto-merge.yaml ─────────────────────────────────────────────────
+#
+# Triggers each time a check suite completes. Evaluates merge eligibility
+# (labels + CI status), submits an APPROVE review via a GitHub App token,
+# and merges (or enqueues for merge queue) when all conditions are met.
+#
+# name: Auto-merge approved dependency PRs
+#
+# on:
+#   check_suite:
+#     types: [completed]
+#
+# jobs:
+#   auto-merge:
+#     name: Merge if all checks pass
+#     runs-on: ubuntu-latest
+#     permissions:
+#       contents: write
+#       pull-requests: write
+#       checks: read
+#       statuses: read
+#     steps:
+#       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+#       - uses: actions/create-github-app-token@1b10c78c7865c340bc4f6099eb2f838309f1e8c3 # v3
+#         id: app-token
+#         with:
+#           app-id: ${{ secrets.KONFLUX_INFRA_AUTO_MERGER_APP_ID }}
+#           private-key: ${{ secrets.KONFLUX_INFRA_AUTO_MERGER_APP_PRIVATE_KEY }}
+#       - uses: konflux-ci/deptriage@main
+#         with:
+#           command: merge
+#           head-sha: ${{ github.event.check_suite.head_sha }}
+#           github-token: ${{ steps.app-token.outputs.token }}
