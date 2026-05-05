@@ -31,14 +31,37 @@ const snippetContextLines = 5
 // ScanImports scans Go source files in rootDir for imports of the given package.
 // Excludes test files, vendor/, and hack/ directories.
 func ScanImports(rootDir, pkg string) ([]types.ImportInfo, error) {
-	var results []types.ImportInfo
+	m, err := ScanImportsForPackages(rootDir, []string{pkg})
+	if err != nil {
+		return nil, err
+	}
+	return m[pkg], nil
+}
 
-	err := filepath.WalkDir(rootDir, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
+// ScanImportsForPackages walks rootDir once and collects import usage for each
+// package path in packages. Duplicate names are deduplicated. The returned map has
+// an entry only for packages that had at least one matching file.
+func ScanImportsForPackages(rootDir string, packages []string) (map[string][]types.ImportInfo, error) {
+	out := make(map[string][]types.ImportInfo)
+	uniq := dedupePackages(packages)
+	if len(uniq) == 0 {
+		return out, nil
+	}
+
+	type pkgMatch struct {
+		name   string
+		quoted string
+	}
+	matches := make([]pkgMatch, 0, len(uniq))
+	for _, p := range uniq {
+		matches = append(matches, pkgMatch{name: p, quoted: fmt.Sprintf("%q", p)})
+	}
+
+	err := filepath.WalkDir(rootDir, func(path string, d os.DirEntry, walkErr error) error {
+		if walkErr != nil {
 			return nil // skip errors
 		}
 
-		// Skip directories
 		if d.IsDir() {
 			base := filepath.Base(path)
 			if base == "vendor" || base == "hack" || base == ".git" {
@@ -47,63 +70,101 @@ func ScanImports(rootDir, pkg string) ([]types.ImportInfo, error) {
 			return nil
 		}
 
-		// Only .go files, exclude tests
 		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
 			return nil
 		}
 
-		if fileContainsImport(path, pkg) {
-			relPath, _ := filepath.Rel(rootDir, path)
-			if relPath == "" {
-				relPath = path
+		lines, err := readLines(path)
+		if err != nil {
+			return nil
+		}
+
+		var matched []pkgMatch
+		for _, m := range matches {
+			if fileContainsImportLines(lines, m.quoted) {
+				matched = append(matched, m)
 			}
-			snippet := extractSnippets(path, pkg)
-			hasTest := testFileExists(path)
-			results = append(results, types.ImportInfo{
+		}
+		if len(matched) == 0 {
+			return nil
+		}
+
+		pkgNames := make([]string, len(matched))
+		for i, m := range matched {
+			pkgNames[i] = m.name
+		}
+		snippetsByPkg := extractSnippetsForPackages(lines, pkgNames)
+
+		relPath, _ := filepath.Rel(rootDir, path)
+		if relPath == "" {
+			relPath = path
+		}
+		hasTest := testFileExists(path)
+		for _, m := range matched {
+			out[m.name] = append(out[m.name], types.ImportInfo{
 				File:    relPath,
 				HasTest: hasTest,
-				Snippet: snippet,
+				Snippet: snippetsByPkg[m.name],
 			})
 		}
 		return nil
 	})
 
-	return results, err
+	return out, err
 }
 
-func fileContainsImport(path, pkg string) bool {
-	f, err := os.Open(path)
-	if err != nil {
-		return false
+func dedupePackages(packages []string) []string {
+	seen := make(map[string]struct{}, len(packages))
+	out := make([]string, 0, len(packages))
+	for _, p := range packages {
+		if p == "" {
+			continue
+		}
+		if _, ok := seen[p]; ok {
+			continue
+		}
+		seen[p] = struct{}{}
+		out = append(out, p)
 	}
-	defer func() { _ = f.Close() }()
+	return out
+}
 
-	scanner := bufio.NewScanner(f)
-	quoted := fmt.Sprintf("%q", pkg)
-	for scanner.Scan() {
-		if strings.Contains(scanner.Text(), quoted) {
+func fileContainsImportLines(lines []string, quoted string) bool {
+	for _, line := range lines {
+		if strings.Contains(line, quoted) {
 			return true
 		}
 	}
 	return false
 }
 
-func extractSnippets(path, pkg string) string {
-	lines, err := readLines(path)
-	if err != nil {
-		return ""
+// extractSnippetsForPackages builds snippet text for each pkg in one pass over lines.
+// Keys are omitted when a package has no matching lines (caller sees "").
+func extractSnippetsForPackages(lines []string, pkgs []string) map[string]string {
+	if len(pkgs) == 0 {
+		return nil
 	}
-
-	var snippets []string
+	blocks := make(map[string][]string, len(pkgs))
+	for _, pkg := range pkgs {
+		blocks[pkg] = nil
+	}
 	for i, line := range lines {
-		if strings.Contains(line, pkg) {
-			start := max(i-snippetContextLines, 0)
-			end := min(i+snippetContextLines+1, len(lines))
-			snippet := strings.Join(lines[start:end], "\n")
-			snippets = append(snippets, snippet)
+		for _, pkg := range pkgs {
+			if strings.Contains(line, pkg) {
+				start := max(i-snippetContextLines, 0)
+				end := min(i+snippetContextLines+1, len(lines))
+				block := strings.Join(lines[start:end], "\n")
+				blocks[pkg] = append(blocks[pkg], block)
+			}
 		}
 	}
-	return strings.Join(snippets, "\n---\n")
+	out := make(map[string]string, len(pkgs))
+	for _, pkg := range pkgs {
+		if b := blocks[pkg]; len(b) > 0 {
+			out[pkg] = strings.Join(b, "\n---\n")
+		}
+	}
+	return out
 }
 
 func readLines(path string) ([]string, error) {
@@ -126,12 +187,10 @@ func testFileExists(goFile string) bool {
 	base := filepath.Base(goFile)
 	name := strings.TrimSuffix(base, ".go")
 
-	// Check specific test file
 	if _, err := os.Stat(filepath.Join(dir, name+"_test.go")); err == nil {
 		return true
 	}
 
-	// Check any test files in the directory
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return false

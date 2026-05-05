@@ -38,6 +38,19 @@ func GatherContext(ctx context.Context, result *types.ClassifyResult, ghClient *
 
 	goAvailable := imports.GoAvailable(workDir)
 
+	var scanByPkg map[string][]types.ImportInfo
+	if goAvailable && len(result.Packages) > 0 {
+		names := make([]string, len(result.Packages))
+		for i, p := range result.Packages {
+			names[i] = p.Name
+		}
+		var err error
+		scanByPkg, err = imports.ScanImportsForPackages(workDir, names)
+		if err != nil {
+			slog.Warn("import scanning failed", "error", err)
+		}
+	}
+
 	for _, pkg := range result.Packages {
 		pkgCtx := types.PackageContext{
 			Name:      pkg.Name,
@@ -56,11 +69,11 @@ func GatherContext(ctx context.Context, result *types.ClassifyResult, ghClient *
 			}
 		}
 
-		// Source file scanning
+		// Source file scanning (single repo walk for all packages)
 		if goAvailable {
-			importInfos, err := imports.ScanImports(workDir, pkg.Name)
-			if err != nil {
-				slog.Warn("import scanning failed", "package", pkg.Name, "error", err)
+			var importInfos []types.ImportInfo
+			if scanByPkg != nil {
+				importInfos = scanByPkg[pkg.Name]
 			}
 			if len(importInfos) == 0 {
 				pkgCtx.NoDirectImports = true
