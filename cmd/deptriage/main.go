@@ -36,6 +36,7 @@ const (
 	flagAutoApprove    = "auto-approve"
 	flagAutoMerge      = "auto-merge"
 	flagClassifyOutput = "classify-output"
+	flagDryRun         = "dry-run"
 )
 
 var (
@@ -88,6 +89,7 @@ func init() {
 		cmd.Flags().IntVar(&prNumber, "pr-number", envInt("INPUT_PR_NUMBER", 0), "Pull request number")
 		cmd.Flags().StringVar(&repo, "repo", envStr("GITHUB_REPOSITORY", ""), "Repository in owner/name format")
 		cmd.Flags().StringVar(&githubToken, "github-token", envStr("INPUT_GITHUB_TOKEN", ""), "GitHub token for API operations")
+		cmd.Flags().Bool(flagDryRun, envBool("INPUT_DRY_RUN"), "Suppress all GitHub API writes; log what would happen")
 	}
 
 	// Classify-specific flags
@@ -114,6 +116,7 @@ func init() {
 
 func runClassify(cmd *cobra.Command, args []string) error {
 	autoApprove, _ := cmd.Flags().GetBool(flagAutoApprove)
+	dryRun, _ := cmd.Flags().GetBool(flagDryRun)
 
 	result, err := classify.Run(cmd.Context(), classify.Options{
 		PRNumber:    prNumber,
@@ -121,12 +124,13 @@ func runClassify(cmd *cobra.Command, args []string) error {
 		Token:       githubToken,
 		OutputFile:  outputFile,
 		AutoApprove: autoApprove,
+		DryRun:      dryRun,
 	})
 	if err != nil {
 		return err
 	}
 
-	writeGitHubOutput("bump-type", string(result.BumpType))
+	writeGitHubOutput("bump-type", result.BumpType.String())
 	writeGitHubOutput("context-json", outputFile)
 	return nil
 }
@@ -138,10 +142,11 @@ func runAnalyze(cmd *cobra.Command, args []string) error {
 	autoApprove, _ := cmd.Flags().GetBool(flagAutoApprove)
 	autoMerge, _ := cmd.Flags().GetBool(flagAutoMerge)
 	classifyOutput, _ := cmd.Flags().GetString(flagClassifyOutput)
+	dryRun, _ := cmd.Flags().GetBool(flagDryRun)
 
 	workDir, _ := os.Getwd()
 
-	err := analyze.Run(cmd.Context(), analyze.Options{
+	riskLevel, err := analyze.Run(cmd.Context(), analyze.Options{
 		PRNumber:       prNumber,
 		Repo:           repo,
 		Token:          githubToken,
@@ -151,12 +156,14 @@ func runAnalyze(cmd *cobra.Command, args []string) error {
 		AutoApprove:    autoApprove,
 		AutoMerge:      autoMerge,
 		ClassifyOutput: classifyOutput,
+		DryRun:         dryRun,
 		WorkDir:        workDir,
 	})
 	// analyze always exits 0
 	if err != nil {
 		slog.Warn("analyze completed with warning", "error", err)
 	}
+	writeGitHubOutput("risk-level", riskLevel.String())
 	return nil
 }
 
@@ -170,12 +177,14 @@ func runBoth(cmd *cobra.Command, args []string) error {
 
 func runMerge(cmd *cobra.Command, args []string) error {
 	headSHA, _ := cmd.Flags().GetString("head-sha")
+	dryRun, _ := cmd.Flags().GetBool(flagDryRun)
 
 	err := merge.Run(cmd.Context(), merge.Options{
 		PRNumber: prNumber,
 		HeadSHA:  headSHA,
 		Repo:     repo,
 		Token:    githubToken,
+		DryRun:   dryRun,
 	})
 	if err != nil {
 		slog.Warn("merge completed with warning", "error", err)

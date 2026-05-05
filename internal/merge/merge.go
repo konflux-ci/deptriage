@@ -34,6 +34,7 @@ type Options struct {
 	HeadSHA  string
 	Repo     string
 	Token    string
+	DryRun   bool
 }
 
 // Run attempts to merge eligible PRs. Always exits 0.
@@ -44,7 +45,7 @@ func Run(ctx context.Context, opts Options) error {
 		return runForSHA(ctx, client, opts)
 	}
 	if opts.PRNumber > 0 {
-		tryMergePR(ctx, client, opts.PRNumber)
+		tryMergePR(ctx, client, opts.PRNumber, opts.DryRun)
 	}
 	return nil
 }
@@ -60,7 +61,7 @@ func runForSHA(ctx context.Context, client *ghclient.Client, opts Options) error
 		return nil
 	}
 	for _, pr := range prs {
-		tryMergePR(ctx, client, pr)
+		tryMergePR(ctx, client, pr, opts.DryRun)
 	}
 	return nil
 }
@@ -90,12 +91,12 @@ func isDeferredApprovalEligible(labels []string) bool {
 	return labelSet[types.LabelSemverPatch] && hasRiskHint && !labelSet[types.LabelRiskHigh]
 }
 
-func tryMergePR(ctx context.Context, client *ghclient.Client, prNumber int) {
-	slog.Info("evaluating PR for auto-merge", "pr", prNumber)
+func tryMergePR(ctx context.Context, client *ghclient.Client, prNumber int, dryRun bool) {
+	slog.Info("evaluating PR for auto-merge", types.LogKeyPR, prNumber)
 
 	pr, err := client.FetchPR(ctx, prNumber)
 	if err != nil {
-		slog.Warn("failed to fetch PR", "pr", prNumber, "error", err)
+		slog.Warn("failed to fetch PR", types.LogKeyPR, prNumber, "error", err)
 		return
 	}
 
@@ -104,14 +105,18 @@ func tryMergePR(ctx context.Context, client *ghclient.Client, prNumber int) {
 	if !eligible && isDeferredApprovalEligible(pr.Labels) {
 		allPassed, err := client.ChecksAllPassed(ctx, prNumber, mergeCheckName)
 		if err != nil {
-			slog.Warn("failed to check CI status for deferred approval", "pr", prNumber, "error", err)
+			slog.Warn("failed to check CI status for deferred approval", types.LogKeyPR, prNumber, "error", err)
 			return
 		}
 		if allPassed {
-			slog.Info("CI checks passed, granting deferred approval for patch with risk hints", "pr", prNumber)
+			slog.Info("CI checks passed, granting deferred approval for patch with risk hints", types.LogKeyPR, prNumber)
 			for _, label := range []string{types.LabelApproved, types.LabelLGTM} {
+				if dryRun {
+					slog.Info("[DRY-RUN] would apply deferred approval label", types.LogKeyLabel, label, types.LogKeyPR, prNumber)
+					continue
+				}
 				if err := client.EnsureLabel(ctx, prNumber, label, types.ColorGreen, "Deferred approval: CI checks passed"); err != nil {
-					slog.Warn("failed to apply deferred approval label", "label", label, "error", err)
+					slog.Warn("failed to apply deferred approval label", types.LogKeyLabel, label, "error", err)
 					return
 				}
 			}
@@ -120,37 +125,42 @@ func tryMergePR(ctx context.Context, client *ghclient.Client, prNumber int) {
 	}
 
 	if !eligible {
-		slog.Info("skipping: labels do not meet merge criteria", "pr", prNumber, "labels", pr.Labels)
+		slog.Info("skipping: labels do not meet merge criteria", types.LogKeyPR, prNumber, "labels", pr.Labels)
 		return
 	}
 
 	allPassed, err := client.ChecksAllPassed(ctx, prNumber, mergeCheckName)
 	if err != nil {
-		slog.Warn("failed to check CI status", "pr", prNumber, "error", err)
+		slog.Warn("failed to check CI status", types.LogKeyPR, prNumber, "error", err)
 		return
 	}
 	if !allPassed {
-		slog.Info("skipping: not all CI checks have passed", "pr", prNumber)
+		slog.Info("skipping: not all CI checks have passed", types.LogKeyPR, prNumber)
 		return
 	}
 
-	slog.Info("all merge conditions met, merging PR", "pr", prNumber)
-	if err := client.SubmitReview(ctx, prNumber, "APPROVE", "All merge conditions met — auto-approved by deptriage."); err != nil {
-		slog.Warn("failed to submit approval review", "pr", prNumber, "error", err)
+	slog.Info("all merge conditions met, merging PR", types.LogKeyPR, prNumber)
+	if dryRun {
+		slog.Info("[DRY-RUN] would submit approval review", types.LogKeyPR, prNumber)
+		slog.Info("[DRY-RUN] would merge PR", types.LogKeyPR, prNumber, "method", "squash")
+		return
+	}
+	if err := client.SubmitReview(ctx, prNumber, types.ReviewApprove, "All merge conditions met — auto-approved by deptriage."); err != nil {
+		slog.Warn("failed to submit approval review", types.LogKeyPR, prNumber, "error", err)
 		return
 	}
 	if err := client.MergePR(ctx, prNumber, "squash"); err != nil {
 		if errors.Is(err, ghclient.ErrMergeQueueRequired) {
-			slog.Info("merge queue detected, enqueuing PR", "pr", prNumber)
+			slog.Info("merge queue detected, enqueuing PR", types.LogKeyPR, prNumber)
 			if err := client.EnqueuePR(ctx, pr.NodeID); err != nil {
-				slog.Warn("enqueue failed", "pr", prNumber, "error", err)
+				slog.Warn("enqueue failed", types.LogKeyPR, prNumber, "error", err)
 			} else {
-				slog.Info("PR enqueued successfully", "pr", prNumber)
+				slog.Info("PR enqueued successfully", types.LogKeyPR, prNumber)
 			}
 			return
 		}
-		slog.Warn("auto-merge failed", "pr", prNumber, "error", err)
+		slog.Warn("auto-merge failed", types.LogKeyPR, prNumber, "error", err)
 		return
 	}
-	slog.Info("PR merged successfully", "pr", prNumber)
+	slog.Info("PR merged successfully", types.LogKeyPR, prNumber)
 }

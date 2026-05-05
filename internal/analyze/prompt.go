@@ -32,7 +32,7 @@ var riskLevelRe = regexp.MustCompile(`(?i)Risk Level:\s*(LOW|MEDIUM|HIGH)`)
 // RenderPrompt substitutes placeholders in the prompt template.
 func RenderPrompt(bumpType types.BumpType, prTitle, packageContext string) string {
 	prompt := promptTemplate
-	prompt = strings.ReplaceAll(prompt, "{{BUMP_TYPE}}", string(bumpType))
+	prompt = strings.ReplaceAll(prompt, "{{BUMP_TYPE}}", bumpType.String())
 	prompt = strings.ReplaceAll(prompt, "{{PR_TITLE}}", prTitle)
 	prompt = strings.ReplaceAll(prompt, "{{PACKAGE_CONTEXT}}", packageContext)
 	return prompt
