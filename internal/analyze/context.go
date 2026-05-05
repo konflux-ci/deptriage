@@ -79,6 +79,9 @@ func GatherContext(ctx context.Context, result *types.ClassifyResult, ghClient *
 				pkgCtx.NoDirectImports = true
 			} else {
 				pkgCtx.Imports = importInfos
+				// Source scan is authoritative for direct usage; clear early
+				// NoDirectImports from go mod why when the chain was empty.
+				pkgCtx.NoDirectImports = false
 			}
 		}
 
