@@ -21,7 +21,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/konflux-ci/dep-impact-analysis-action/internal/types"
+	"github.com/konflux-ci/deptriage/internal/types"
 )
 
 //go:embed template.md

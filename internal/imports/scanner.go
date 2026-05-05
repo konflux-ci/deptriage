@@ -23,7 +23,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/konflux-ci/dep-impact-analysis-action/internal/types"
+	"github.com/konflux-ci/deptriage/internal/types"
 )
 
 const snippetContextLines = 5

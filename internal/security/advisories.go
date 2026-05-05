@@ -22,7 +22,7 @@ import (
 	"time"
 
 	gh "github.com/google/go-github/v85/github"
-	"github.com/konflux-ci/dep-impact-analysis-action/internal/types"
+	"github.com/konflux-ci/deptriage/internal/types"
 )
 
 const advisoryTimeout = 30 * time.Second

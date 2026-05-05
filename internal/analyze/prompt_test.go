@@ -20,7 +20,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/konflux-ci/dep-impact-analysis-action/internal/types"
+	"github.com/konflux-ci/deptriage/internal/types"
 )
 
 func TestRenderPrompt(t *testing.T) {

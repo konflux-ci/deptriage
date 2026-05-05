@@ -1,4 +1,4 @@
-module github.com/konflux-ci/dep-impact-analysis-action
+module github.com/konflux-ci/deptriage
 
 go 1.25.8
 

@@ -21,10 +21,10 @@ import (
 	"encoding/json"
 	"log/slog"
 
-	ghclient "github.com/konflux-ci/dep-impact-analysis-action/internal/github"
-	"github.com/konflux-ci/dep-impact-analysis-action/internal/imports"
-	"github.com/konflux-ci/dep-impact-analysis-action/internal/security"
-	"github.com/konflux-ci/dep-impact-analysis-action/internal/types"
+	ghclient "github.com/konflux-ci/deptriage/internal/github"
+	"github.com/konflux-ci/deptriage/internal/imports"
+	"github.com/konflux-ci/deptriage/internal/security"
+	"github.com/konflux-ci/deptriage/internal/types"
 
 	gh "github.com/google/go-github/v85/github"
 )
