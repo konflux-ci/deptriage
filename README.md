@@ -148,7 +148,7 @@ jobs:
           github-token: ${{ steps.app-token.outputs.token }}
 ```
 
-See `.github/workflows/example-dep-triage.yaml` for a ready-to-copy example.
+See `.github/workflows/example-dep-triage-and-auto-merge.yaml` for a ready-to-copy example.
 
 ## Building
 

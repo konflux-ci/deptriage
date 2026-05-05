@@ -36,6 +36,7 @@ type Options struct {
 	Token       string
 	OutputFile  string
 	AutoApprove bool
+	DryRun      bool
 }
 
 // Run executes the full classification pipeline.
@@ -72,8 +73,12 @@ func Run(ctx context.Context, opts Options) (*types.ClassifyResult, error) {
 		slog.Warn("risk hints detected", "hint", strings.SplitN(riskHints, ":", 2)[0])
 	}
 	for _, hint := range riskHintLabels {
+		if opts.DryRun {
+			slog.Info("[DRY-RUN] would apply risk-hint label", types.LogKeyLabel, hint.Label, types.LogKeyPR, opts.PRNumber)
+			continue
+		}
 		if err := client.EnsureLabel(ctx, opts.PRNumber, hint.Label, hint.Color, hint.LabelDesc); err != nil {
-			slog.Warn("failed to apply risk-hint label", "label", hint.Label, "error", err)
+			slog.Warn("failed to apply risk-hint label", types.LogKeyLabel, hint.Label, "error", err)
 		}
 	}
 
@@ -94,14 +99,19 @@ func Run(ctx context.Context, opts Options) (*types.ClassifyResult, error) {
 			return strings.HasPrefix(l, "semver/")
 		})
 		if !hasLabel {
-			desc := fmt.Sprintf("Semver %s version bump", bumpType)
-			if bumpType == types.BumpDigest && ecosystem == "gomod" {
-				desc = "Go module digest/pseudo-version bump (treated as minor)"
-			}
-			if err := client.EnsureLabel(ctx, opts.PRNumber, labelName, labelColor, desc); err != nil {
-				slog.Warn("failed to apply label", "label", labelName, "error", err)
-			} else {
+			if opts.DryRun {
+				slog.Info("[DRY-RUN] would apply semver label", types.LogKeyLabel, labelName, types.LogKeyPR, opts.PRNumber)
 				appliedLabel = labelName
+			} else {
+				desc := fmt.Sprintf("Semver %s version bump", bumpType)
+				if bumpType == types.BumpDigest && ecosystem == "gomod" {
+					desc = "Go module digest/pseudo-version bump (treated as minor)"
+				}
+				if err := client.EnsureLabel(ctx, opts.PRNumber, labelName, labelColor, desc); err != nil {
+					slog.Warn("failed to apply label", types.LogKeyLabel, labelName, "error", err)
+				} else {
+					appliedLabel = labelName
+				}
 			}
 		}
 	}
@@ -124,8 +134,12 @@ func Run(ctx context.Context, opts Options) (*types.ClassifyResult, error) {
 	if opts.AutoApprove && isAutoApproveEligible && riskHints == "" {
 		slog.Info("applying auto-approve labels for eligible PR")
 		for _, label := range []string{types.LabelApproved, types.LabelLGTM} {
+			if opts.DryRun {
+				slog.Info("[DRY-RUN] would apply auto-approve label", types.LogKeyLabel, label, types.LogKeyPR, opts.PRNumber)
+				continue
+			}
 			if err := client.EnsureLabel(ctx, opts.PRNumber, label, types.ColorGreen, "Auto-approved dependency update"); err != nil {
-				slog.Warn("failed to apply auto-approve label", "label", label, "error", err)
+				slog.Warn("failed to apply auto-approve label", types.LogKeyLabel, label, "error", err)
 			}
 		}
 	}

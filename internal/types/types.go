@@ -33,8 +33,23 @@ const (
 	ColorRed    = "e11d48"
 )
 
+// GitHub pull request review event types.
+const (
+	ReviewApprove = "APPROVE"
+	ReviewComment = "COMMENT"
+)
+
+// Shared structured log keys.
+const (
+	LogKeyPR    = "pr"
+	LogKeyEvent = "event"
+	LogKeyLabel = "label"
+)
+
 // BumpType represents a semver bump classification.
 type BumpType string
+
+func (b BumpType) String() string { return string(b) }
 
 const (
 	BumpMajor   BumpType = "major"
@@ -109,6 +124,22 @@ func (b BumpType) Color() string {
 
 // RiskLevel represents an AI-assessed risk level.
 type RiskLevel string
+
+func (r RiskLevel) String() string { return string(r) }
+func (r RiskLevel) Label() string  { return "risk/" + string(r) }
+
+func (r RiskLevel) Color() string {
+	switch r {
+	case RiskLow:
+		return ColorGreen
+	case RiskMedium:
+		return ColorYellow
+	case RiskHigh:
+		return ColorRed
+	default:
+		return ""
+	}
+}
 
 const (
 	RiskLow     RiskLevel = "low"

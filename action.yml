@@ -34,6 +34,10 @@ inputs:
     description: "Merge eligible PRs after analysis when auto-approve labels are present and CI checks pass (requires auto-approve)"
     required: false
     default: "false"
+  dry-run:
+    description: "Suppress all GitHub API writes; log what would happen instead"
+    required: false
+    default: "false"
   head-sha:
     description: "Head SHA to find PRs for (used by merge command with check_suite trigger)"
     required: false
@@ -59,6 +63,7 @@ runs:
     INPUT_LLM_MODEL: ${{ inputs.llm-model }}
     INPUT_AUTO_APPROVE: ${{ inputs.auto-approve }}
     INPUT_AUTO_MERGE: ${{ inputs.auto-merge }}
+    INPUT_DRY_RUN: ${{ inputs.dry-run }}
     INPUT_HEAD_SHA: ${{ inputs.head-sha }}
 
 branding:

@@ -25,6 +25,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	gh "github.com/google/go-github/v85/github"
 )
@@ -190,7 +191,8 @@ func (c *Client) EnqueuePR(ctx context.Context, prNodeID string) error {
 	req.Header.Set("Authorization", "Bearer "+c.token)
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := http.DefaultClient.Do(req)
+	httpClient := &http.Client{Timeout: 30 * time.Second}
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("executing GraphQL request: %w", err)
 	}

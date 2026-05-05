@@ -271,3 +271,13 @@ The APPROVE review step remains unchanged — merge queues still enforce approva
 - Detect merge queue upfront via repo settings API — adds an extra API call on every run; the fallback approach is zero-cost when merge queues are not in use.
 - Add a `--use-merge-queue` flag — requires per-repo configuration and workflow changes; the fallback approach is transparent.
 - Use `enablePullRequestAutoMerge` GraphQL mutation — tells GitHub to merge when checks pass, but deptriage already handles check evaluation; adding another layer of "wait for checks" is redundant and harder to reason about.
+
+### 18. Dry-run mode: guard side-effect call sites (not client wrapper)
+
+All commands support a `--dry-run` flag that suppresses GitHub API write operations (labels, comments, reviews, merges, enqueues) while preserving reads. Each suppressed write emits a structured `slog.Info` with a `[DRY-RUN]` prefix showing what would have been done.
+
+The flag is threaded through the existing `Options` struct of each command package (`classify.Options`, `analyze.Options`, `merge.Options`) and checked at each call site that performs a write operation. This is a simple, explicit approach — ~15 guard clauses across three files.
+
+**Alternatives considered:**
+- Wrap the GitHub client with a dry-run decorator — cleaner separation of concerns, but requires refactoring all callers to use an interface instead of a concrete `*Client`. The current codebase has ~6 distinct write methods; wrapping them adds a new interface, a new struct, and a constructor, for marginal benefit over inline guards. Not worth the refactor for this scope.
+- Check dry-run inside the GitHub client methods — conflates the client's responsibility (API access) with command policy (should we write?). The client should faithfully execute whatever it's told; the caller decides whether to call it.
