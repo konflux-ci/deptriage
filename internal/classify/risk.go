@@ -55,9 +55,8 @@ var (
 			color:      types.ColorYellow,
 			labelDesc:  "Go build toolchain image update — may affect build infrastructure",
 			description: "This PR updates the Go build toolchain image. " +
-				"This often requires coordinated changes to the build pipeline and can cause build failures " +
-				"if the new Go version is incompatible with the current build infrastructure. " +
-				"These updates are historically HIGH risk in this project.",
+				"This can cause build failures if the new Go version is incompatible with the current build infrastructure. " +
+				"However, if the Konflux CI pipeline passes, the update is proven safe.",
 		},
 		{
 			re:         goVersionBumpRe,
@@ -78,7 +77,8 @@ var (
 			color:      types.ColorYellow,
 			labelDesc:  "Container base image update — may affect build behavior",
 			description: "This PR updates a container base image. " +
-				"Base image changes can affect build behavior, available system libraries, and binary compatibility.",
+				"Base image changes can affect build behavior, available system libraries, and binary compatibility. " +
+				"However, if the Konflux CI pipeline passes, the build is proven compatible.",
 		},
 	}
 )

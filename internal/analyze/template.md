@@ -6,13 +6,13 @@ You are analyzing a Go dependency update to assess its impact on a codebase. Thi
 
 {{PACKAGE_CONTEXT}}
 
-## Known High-Risk Patterns
+## Known Risk Patterns
 
-The context may include a `riskHints` field with warnings about known high-risk patterns detected in this PR. If present, you MUST factor these into your risk assessment. These patterns are based on real incidents in this project:
+The context may include a `riskHints` field with warnings about known risk patterns detected in this PR. If present, you MUST factor these into your risk assessment. These patterns are based on real incidents in this project:
 
-- **GO_TOOLCHAIN_UPDATE**: Go build toolchain image changes frequently cause CI failures because the new Go version may not match the version used in Tekton pipeline build tasks. This almost always requires coordinated changes to build infrastructure. Default to HIGH risk.
+- **GO_TOOLCHAIN_UPDATE**: Go build toolchain image changes can cause CI failures if the new Go version is incompatible with build infrastructure. However, if the Konflux CI pipeline (which builds the binary with this toolchain) passes, the update is proven safe. Default to MEDIUM risk.
 - **GO_VERSION_BUMP**: Changes to the `go` directive in go.mod can break CI builds if the build image uses an older Go version. Default to at least MEDIUM risk.
-- **CONTAINER_IMAGE_UPDATE**: Base image changes can affect build behavior and binary compatibility. Evaluate carefully.
+- **CONTAINER_IMAGE_UPDATE**: Base image changes can affect build behavior and binary compatibility. However, if the Konflux CI pipeline passes, the build is proven compatible. Default to MEDIUM risk.
 
 ## Your Task
 
