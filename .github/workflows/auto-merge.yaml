@@ -18,5 +18,4 @@ jobs:
       - uses: ./
         with:
           command: merge
-          pr-number: "0"
           head-sha: ${{ github.event.check_suite.head_sha }}

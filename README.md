@@ -139,7 +139,7 @@ jobs:
       - uses: actions/create-github-app-token@v3
         id: app-token
         with:
-          app-id: ${{ secrets.AUTO_MERGER_APP_ID }}
+          client-id: ${{ secrets.AUTO_MERGER_APP_ID }}
           private-key: ${{ secrets.AUTO_MERGER_APP_PRIVATE_KEY }}
       - uses: konflux-ci/deptriage@main
         with:
