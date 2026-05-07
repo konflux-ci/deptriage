@@ -218,14 +218,26 @@ func (c *Client) EnqueuePR(ctx context.Context, prNodeID string) error {
 	return nil
 }
 
-// ChecksAllPassed returns true if all CI checks on the PR head SHA are success
-// or neutral, excluding the specified workflow name (to avoid self-referencing).
-func (c *Client) ChecksAllPassed(ctx context.Context, prNumber int, excludeWorkflow string) (bool, error) {
+// CheckStatus represents the result of evaluating all CI checks on a PR.
+type CheckStatus int
+
+const (
+	ChecksPassed     CheckStatus = iota // All checks completed successfully
+	ChecksInProgress                    // Some checks are still running
+	ChecksFailed                        // At least one check has failed
+)
+
+// ChecksAllPassed evaluates CI checks on the PR head SHA, excluding the specified
+// workflow name (to avoid self-referencing). Returns ChecksPassed, ChecksInProgress,
+// or ChecksFailed.
+func (c *Client) ChecksAllPassed(ctx context.Context, prNumber int, excludeWorkflow string) (CheckStatus, error) {
 	pr, _, err := c.inner.PullRequests.Get(ctx, c.owner, c.repo, prNumber)
 	if err != nil {
-		return false, fmt.Errorf("fetching PR #%d for check status: %w", prNumber, err)
+		return ChecksFailed, fmt.Errorf("fetching PR #%d for check status: %w", prNumber, err)
 	}
 	ref := pr.GetHead().GetSHA()
+
+	hasInProgress := false
 
 	opts := &gh.ListCheckRunsOptions{
 		ListOptions: gh.ListOptions{PerPage: 100},
@@ -233,15 +245,20 @@ func (c *Client) ChecksAllPassed(ctx context.Context, prNumber int, excludeWorkf
 	for {
 		result, resp, err := c.inner.Checks.ListCheckRunsForRef(ctx, c.owner, c.repo, ref, opts)
 		if err != nil {
-			return false, fmt.Errorf("listing check runs for %s: %w", ref, err)
+			return ChecksFailed, fmt.Errorf("listing check runs for %s: %w", ref, err)
 		}
 		for _, cr := range result.CheckRuns {
 			if cr.GetName() == excludeWorkflow {
 				continue
 			}
+			status := cr.GetStatus()
+			if status != "completed" {
+				hasInProgress = true
+				continue
+			}
 			conclusion := cr.GetConclusion()
 			if conclusion != "success" && conclusion != "neutral" && conclusion != "skipped" && conclusion != "cancelled" {
-				return false, nil
+				return ChecksFailed, nil
 			}
 		}
 		if resp.NextPage == 0 {
@@ -253,19 +270,26 @@ func (c *Client) ChecksAllPassed(ctx context.Context, prNumber int, excludeWorkf
 	// Also check combined commit status (legacy status API)
 	status, _, err := c.inner.Repositories.GetCombinedStatus(ctx, c.owner, c.repo, ref, nil)
 	if err != nil {
-		return false, fmt.Errorf("fetching combined status for %s: %w", ref, err)
+		return ChecksFailed, fmt.Errorf("fetching combined status for %s: %w", ref, err)
 	}
 	for _, s := range status.Statuses {
 		if s.GetContext() == excludeWorkflow {
 			continue
 		}
 		state := s.GetState()
+		if state == "pending" {
+			hasInProgress = true
+			continue
+		}
 		if state != "success" {
-			return false, nil
+			return ChecksFailed, nil
 		}
 	}
 
-	return true, nil
+	if hasInProgress {
+		return ChecksInProgress, nil
+	}
+	return ChecksPassed, nil
 }
 
 // HasLabels returns true if the PR has all the specified labels.

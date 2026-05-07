@@ -175,12 +175,12 @@ func tryMerge(ctx context.Context, client *ghclient.Client, opts Options) {
 		return
 	}
 
-	allPassed, err := client.ChecksAllPassed(ctx, opts.PRNumber, deptriageCheckName)
+	checkStatus, err := client.ChecksAllPassed(ctx, opts.PRNumber, deptriageCheckName)
 	if err != nil {
 		slog.Warn("failed to check CI status for auto-merge", "error", err)
 		return
 	}
-	if !allPassed {
+	if checkStatus != ghclient.ChecksPassed {
 		slog.Info("skipping auto-merge: not all CI checks have passed")
 		return
 	}

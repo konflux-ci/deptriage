@@ -21,6 +21,7 @@ import (
 	"errors"
 	"log/slog"
 	"strings"
+	"time"
 
 	ghclient "github.com/konflux-ci/deptriage/internal/github"
 	"github.com/konflux-ci/deptriage/internal/types"
@@ -103,12 +104,12 @@ func tryMergePR(ctx context.Context, client *ghclient.Client, prNumber int, dryR
 	eligible := isMergeEligible(pr.Labels)
 
 	if !eligible && isDeferredApprovalEligible(pr.Labels) {
-		allPassed, err := client.ChecksAllPassed(ctx, prNumber, mergeCheckName)
+		checkStatus, err := client.ChecksAllPassed(ctx, prNumber, mergeCheckName)
 		if err != nil {
 			slog.Warn("failed to check CI status for deferred approval", types.LogKeyPR, prNumber, "error", err)
 			return
 		}
-		if allPassed {
+		if checkStatus == ghclient.ChecksPassed {
 			slog.Info("CI checks passed, granting deferred approval for patch with risk hints", types.LogKeyPR, prNumber)
 			for _, label := range []string{types.LabelApproved, types.LabelLGTM} {
 				if dryRun {
@@ -129,12 +130,12 @@ func tryMergePR(ctx context.Context, client *ghclient.Client, prNumber int, dryR
 		return
 	}
 
-	allPassed, err := client.ChecksAllPassed(ctx, prNumber, mergeCheckName)
+	checkStatus, err := waitForChecks(ctx, client, prNumber, mergeCheckName)
 	if err != nil {
 		slog.Warn("failed to check CI status", types.LogKeyPR, prNumber, "error", err)
 		return
 	}
-	if !allPassed {
+	if checkStatus != ghclient.ChecksPassed {
 		slog.Info("skipping: not all CI checks have passed", types.LogKeyPR, prNumber)
 		return
 	}
@@ -163,4 +164,31 @@ func tryMergePR(ctx context.Context, client *ghclient.Client, prNumber int, dryR
 		return
 	}
 	slog.Info("PR merged successfully", types.LogKeyPR, prNumber)
+}
+
+const (
+	checkRetryAttempts = 5
+	checkRetryInterval = 60 * time.Second
+)
+
+func waitForChecks(ctx context.Context, client *ghclient.Client, prNumber int, excludeWorkflow string) (ghclient.CheckStatus, error) {
+	for attempt := range checkRetryAttempts {
+		status, err := client.ChecksAllPassed(ctx, prNumber, excludeWorkflow)
+		if err != nil {
+			return status, err
+		}
+		if status != ghclient.ChecksInProgress {
+			return status, nil
+		}
+		if attempt < checkRetryAttempts-1 {
+			slog.Info("checks still in progress, retrying", types.LogKeyPR, prNumber, "attempt", attempt+1, "retryIn", checkRetryInterval)
+			select {
+			case <-time.After(checkRetryInterval):
+			case <-ctx.Done():
+				return ghclient.ChecksInProgress, ctx.Err()
+			}
+		}
+	}
+	slog.Info("checks still in progress after retries, giving up", types.LogKeyPR, prNumber)
+	return ghclient.ChecksInProgress, nil
 }
