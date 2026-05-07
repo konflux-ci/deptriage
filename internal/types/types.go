@@ -22,6 +22,7 @@ const (
 	LabelLGTM      = "lgtm"
 	LabelRiskHigh  = "risk/high"
 	LabelSemverPatch = "semver/patch"
+	LabelSemverMinor = "semver/minor"
 
 	RiskHintLabelPrefix = "risk-hint/"
 )

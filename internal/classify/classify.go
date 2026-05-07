@@ -127,9 +127,10 @@ func Run(ctx context.Context, opts Options) (*types.ClassifyResult, error) {
 		Label:     appliedLabel,
 	}
 
-	// Auto-approve eligible patches by applying approved/lgtm labels.
+	// Auto-approve eligible patches and minors by applying approved/lgtm labels.
 	// Gomod digest bumps are excluded — pseudo-versions have no semver guarantees.
 	isAutoApproveEligible := bumpType == types.BumpPatch ||
+		bumpType == types.BumpMinor ||
 		(bumpType == types.BumpDigest && ecosystem != "gomod")
 	if opts.AutoApprove && isAutoApproveEligible && riskHints == "" {
 		slog.Info("applying auto-approve labels for eligible PR")
