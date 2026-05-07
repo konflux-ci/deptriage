@@ -78,8 +78,8 @@ func isMergeEligible(labels []string) bool {
 }
 
 // isDeferredApprovalEligible checks if the PR is eligible for deferred approval:
-// a patch bump with risk hints that wasn't auto-approved early, but can be
-// approved now that CI has proven the build is safe.
+// a patch or minor bump with risk hints that wasn't auto-approved early, but can
+// be approved now that CI has proven the build is safe.
 func isDeferredApprovalEligible(labels []string) bool {
 	labelSet := make(map[string]bool, len(labels))
 	hasRiskHint := false
@@ -89,7 +89,8 @@ func isDeferredApprovalEligible(labels []string) bool {
 			hasRiskHint = true
 		}
 	}
-	return labelSet[types.LabelSemverPatch] && hasRiskHint && !labelSet[types.LabelRiskHigh]
+	isPatchOrMinor := labelSet[types.LabelSemverPatch] || labelSet[types.LabelSemverMinor]
+	return isPatchOrMinor && hasRiskHint && !labelSet[types.LabelRiskHigh]
 }
 
 func tryMergePR(ctx context.Context, client *ghclient.Client, prNumber int, dryRun bool) {

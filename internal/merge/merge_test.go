@@ -103,9 +103,9 @@ func TestIsDeferredApprovalEligible(t *testing.T) {
 			want:   false,
 		},
 		{
-			name:   "minor bump with risk hint not eligible",
+			name:   "minor bump with risk hint eligible",
 			labels: []string{"semver/minor", "risk-hint/go-toolchain"},
-			want:   false,
+			want:   true,
 		},
 		{
 			name:   "patch without risk hint not eligible",
