@@ -21,7 +21,7 @@ import (
 	"fmt"
 	"time"
 
-	gh "github.com/google/go-github/v85/github"
+	gh "github.com/google/go-github/v86/github"
 	"github.com/konflux-ci/deptriage/internal/types"
 )
 

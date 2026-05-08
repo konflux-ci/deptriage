@@ -27,7 +27,7 @@ import (
 	"strings"
 	"time"
 
-	gh "github.com/google/go-github/v85/github"
+	gh "github.com/google/go-github/v86/github"
 )
 
 // ErrMergeQueueRequired indicates the repository requires PRs to go through a merge queue.
