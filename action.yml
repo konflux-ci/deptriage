@@ -52,7 +52,7 @@ outputs:
 
 runs:
   using: "docker"
-  image: "docker://quay.io/konflux-ci/deptriage@sha256:7166f592ee9406695ede902c73b5ecb75d1c19b69161f54033d388d86a88b4a5"
+  image: "docker://quay.io/konflux-ci/deptriage@sha256:6aee893c17156f4dca17166e69b5dcab0617dc530818adcafc26eb39ebec87d5"
   args:
     - ${{ inputs.command }}
   env:
