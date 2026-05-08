@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Detect Go toolchain update risk
-The system SHALL detect Go toolchain/build image updates in the PR title and flag them as high-risk.
+The system SHALL detect Go toolchain/build image updates in the PR title and apply a risk-hint label to flag them for enhanced scrutiny during LLM analysis. Risk hints are advisory — the actual risk level (LOW/MEDIUM/HIGH) is determined by the LLM, which is instructed to default to MEDIUM for these patterns since passing CI proves the update is safe.
 
 #### Scenario: Go toolset image update
 - **WHEN** the PR title matches `go-toolset` (case-insensitive)
@@ -46,7 +46,7 @@ Label mapping:
 - **THEN** the system SHALL apply labels `risk-hint/go-toolchain` and `risk-hint/container-image`
 
 #### Scenario: No risk-hint labels for non-risky PR
-- **WHEN** no high-risk patterns are detected
+- **WHEN** no risk patterns are detected
 - **THEN** the system SHALL NOT apply any `risk-hint/*` labels
 
 ### Requirement: Aggregate risk hints as structured output
@@ -57,5 +57,5 @@ The system SHALL collect all detected risk hints into a single string field, wit
 - **THEN** the system SHALL return a risk hints string containing both hints with their explanatory messages
 
 #### Scenario: No risk hints detected
-- **WHEN** no high-risk patterns are detected in the PR title or body
+- **WHEN** no risk patterns are detected in the PR title or body
 - **THEN** the system SHALL return an empty risk hints string

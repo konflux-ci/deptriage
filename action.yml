@@ -27,7 +27,7 @@ inputs:
     description: "LLM model name (provider-dependent default)"
     required: false
   auto-approve:
-    description: "Apply approved/lgtm labels and formal APPROVE review for eligible low-risk patches"
+    description: "Apply approved/lgtm labels and formal APPROVE review for eligible low-risk patches and minors"
     required: false
     default: "false"
   auto-merge:

@@ -26,10 +26,13 @@ to help reviewers prioritize their work.
   with exponential backoff on rate limits (429)
 - **PR operations** -- applies labels, posts/updates comments with history
   collapse, submits formal review events (APPROVE/REQUEST_CHANGES/COMMENT),
-  and applies auto-approve labels for eligible patches
+  and applies auto-approve labels for eligible patches and minors
 - **Auto-merge** -- merges eligible PRs via the GitHub API after submitting an
-  APPROVE review to satisfy branch rulesets, with deferred approval for patch
-  bumps with risk hints once CI passes
+  APPROVE review to satisfy branch rulesets, with deferred approval for
+  patches and minors with risk hints once CI passes, and retry logic for
+  in-progress checks
+- **Dry-run mode** -- suppresses all GitHub API writes and logs what would
+  happen, for testing deptriage on a repo without side effects
 
 ## Architecture
 

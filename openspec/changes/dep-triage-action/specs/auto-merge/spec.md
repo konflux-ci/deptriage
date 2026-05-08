@@ -26,8 +26,10 @@ Merge eligibility requires ALL of the following:
 
 #### Scenario: CI checks still pending
 - **WHEN** auto-merge is enabled and the PR is eligible, but one or more CI checks have status `pending` or `queued`
-- **THEN** the system SHALL skip the merge attempt and log that checks are not yet complete
+- **THEN** the system SHALL retry up to 5 times with 60-second intervals, waiting for checks to complete
+- **AND** if checks are still in progress after all retries, the system SHALL skip the merge attempt and log that checks are not yet complete
 - **AND** the system SHALL NOT fail the action
+- **RATIONALE:** The `check_suite:completed` event fires per suite, not when all checks are green. Without retry, eligible PRs can miss their merge window when the auto-merge workflow fires before other checks complete.
 
 #### Scenario: CI checks failing
 - **WHEN** auto-merge is enabled and the PR is eligible, but one or more CI checks have status `failure` or `error`
@@ -45,13 +47,13 @@ Merge eligibility requires ALL of the following:
 #### Scenario: auto-approve labels not present
 - **WHEN** auto-merge is enabled, auto-approve is enabled, but the `approved` and `lgtm` labels are not present on the PR, and the PR is not eligible for deferred approval
 - **THEN** the system SHALL NOT merge the PR
-- **RATIONALE:** The absence of labels means the classify phase determined the PR is not eligible for auto-approval (e.g., major/minor bump, gomod digest).
+- **RATIONALE:** The absence of labels means the classify phase determined the PR is not eligible for auto-approval (e.g., major bump, gomod digest).
 
-### Requirement: Deferred approval for patch bumps with risk hints
-The system SHALL grant deferred approval for patch bumps that were not auto-approved during classification due to risk hints, once all CI checks have passed. This enables safe auto-merge of updates like go-toolset rebuilds where the CI pipeline — not the risk hint — is the authoritative safety gate.
+### Requirement: Deferred approval for patches and minors with risk hints
+The system SHALL grant deferred approval for patch and minor bumps that were not auto-approved during classification due to risk hints, once all CI checks have passed. This enables safe auto-merge of updates like go-toolset rebuilds where the CI pipeline — not the risk hint — is the authoritative safety gate.
 
 Deferred approval eligibility requires ALL of the following:
-1. The `semver/patch` label is present (classify determined it's a patch bump)
+1. The `semver/patch` or `semver/minor` label is present
 2. At least one `risk-hint/*` label is present (explains why early approval was skipped)
 3. The `risk/high` label is NOT present
 4. All CI checks on the PR have passed
@@ -66,10 +68,10 @@ Deferred approval eligibility requires ALL of the following:
 - **THEN** the system SHALL NOT grant deferred approval and SHALL NOT merge
 - **RATIONALE:** CI failure means the risk hint's concern was justified — the update may have broken the build.
 
-#### Scenario: Minor bump with risk hints not eligible for deferred approval
-- **WHEN** a PR has labels `semver/minor` and `risk-hint/go-toolchain`, and all CI checks pass
-- **THEN** the system SHALL NOT grant deferred approval
-- **RATIONALE:** Deferred approval is limited to patch bumps. Minor and major bumps require explicit human review.
+#### Scenario: Minor bump with risk hints eligible for deferred approval
+- **WHEN** a PR has labels `semver/minor` and `risk-hint/go-toolchain`, no `risk/high` label, and all CI checks pass
+- **THEN** the system SHALL apply `approved` and `lgtm` labels and merge the PR
+- **RATIONALE:** Minor bumps with risk hints benefit from the same deferred approval as patches. When the Konflux CI pipeline passes, the build is proven safe regardless of bump type.
 
 #### Scenario: Patch without risk hints uses normal auto-approve path
 - **WHEN** a PR has label `semver/patch` but no `risk-hint/*` labels
@@ -138,8 +140,9 @@ The deptriage binary SHALL provide a `merge` subcommand that can be invoked inde
 - **THEN** the system SHALL find the associated PR, verify labels and check status, and merge if all conditions are met
 
 #### Scenario: Not all checks complete yet
-- **WHEN** the merge subcommand runs but other checks on the PR are still pending or failing
-- **THEN** the system SHALL skip the merge attempt (a subsequent `check_suite` event will retry)
+- **WHEN** the merge subcommand runs but other checks on the PR are still pending
+- **THEN** the system SHALL retry up to 5 times with 60-second intervals before giving up
+- **RATIONALE:** Relying solely on subsequent `check_suite` events is unreliable — the last suite to complete may have already fired before other checks finished.
 
 #### Scenario: Workflow self-exclusion
 - **WHEN** evaluating check status for merge eligibility
