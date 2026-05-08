@@ -98,7 +98,8 @@ jobs:
     name: Triage dependency PR
     if: >-
       github.event.pull_request.user.login == 'renovate[bot]' ||
-      github.event.pull_request.user.login == 'red-hat-konflux[bot]'
+      github.event.pull_request.user.login == 'red-hat-konflux[bot]' ||
+      github.event.pull_request.user.login == 'dependabot[bot]'
     runs-on: ubuntu-latest
     permissions:
       contents: read
