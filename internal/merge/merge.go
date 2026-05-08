@@ -105,7 +105,7 @@ func tryMergePR(ctx context.Context, client *ghclient.Client, prNumber int, dryR
 	eligible := isMergeEligible(pr.Labels)
 
 	if !eligible && isDeferredApprovalEligible(pr.Labels) {
-		checkStatus, err := client.ChecksAllPassed(ctx, prNumber, mergeCheckName)
+		checkStatus, err := waitForChecks(ctx, client, prNumber, mergeCheckName)
 		if err != nil {
 			slog.Warn("failed to check CI status for deferred approval", types.LogKeyPR, prNumber, "error", err)
 			return
