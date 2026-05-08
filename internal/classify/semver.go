@@ -32,6 +32,9 @@ var (
 
 	// Digest-only: abcdef0 -> 1234abc
 	digestRe = regexp.MustCompile("[`]?([0-9a-f]{7,})[`]?\\s*(?:->|→)\\s*[`]?([0-9a-f]{7,})")
+
+	// pinDigest: Renovate "pinDigest" update type in PR body table
+	pinDigestRe = regexp.MustCompile(`(?i)\|\s*pinDigest\s*\|`)
 )
 
 // DetectBumpType determines the semver bump type from PR title and body text.
@@ -51,6 +54,11 @@ func DetectBumpType(title, body string) types.BumpType {
 	// Check digest-only updates
 	if digestRe.MatchString(text) {
 		return types.BumpDigest
+	}
+
+	// Check pinDigest updates (first-time SHA pinning, no version transition)
+	if pinDigestRe.MatchString(text) {
+		return types.BumpPatch
 	}
 
 	return types.BumpUnknown
