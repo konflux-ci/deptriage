@@ -32,7 +32,7 @@ _(none — this is a greenfield repo)_
 
 ## Impact
 
-- **New repo:** `konflux-ci/dep-impact-analysis-action` — all code is new
+- **New repo:** `konflux-ci/deptriage` — all code is new
 - **Dependencies:** Go standard library, `google/go-github` (GitHub API), `cobra` (CLI), LLM provider SDKs or raw HTTP; optional runtime dependency on `govulncheck`
 - **Downstream consumers:** Any Konflux repo currently using the tekton-kueue bash scripts will migrate to referencing this action
 - **External APIs:** GitHub API (labels, comments, merge, dependency review, security advisories), Gemini API, Anthropic API
