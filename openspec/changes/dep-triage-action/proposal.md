@@ -1,6 +1,6 @@
 ## Why
 
-Dependency PRs (from Renovate/Mintmaker) are the highest-volume PR category in Konflux repos, yet most are low-risk patches that consume reviewer time. The current triage system lives as scattered bash/python scripts and GitHub workflows inside `tekton-kueue`, making it impossible to reuse across repos. We need a standalone, reusable GitHub Action backed by a compiled Go binary that any Konflux repo can adopt with a single workflow reference.
+Dependency PRs (from Renovate/Mintmaker/Dependabot) are the highest-volume PR category in Konflux repos, yet most are low-risk patches that consume reviewer time. The current triage system lives as scattered bash/python scripts and GitHub workflows inside `tekton-kueue`, making it impossible to reuse across repos. We need a standalone, reusable GitHub Action backed by a compiled Go binary that any Konflux repo can adopt with a single workflow reference.
 
 ## What Changes
 
