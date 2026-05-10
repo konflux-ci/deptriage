@@ -50,13 +50,13 @@ func (c *Client) FetchDependencyReview(ctx context.Context, baseRef, headRef str
 	defer cancel()
 
 	url := fmt.Sprintf("repos/%s/%s/dependency-graph/compare/%s...%s", c.owner, c.repo, baseRef, headRef)
-	req, err := c.inner.NewRequest("GET", url, nil)
+	req, err := c.inner.NewRequest(ctx, "GET", url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("creating dependency review request: %w", err)
 	}
 
 	var raw json.RawMessage
-	_, err = c.inner.Do(ctx, req, &raw)
+	_, err = c.inner.Do(req, &raw)
 	if err != nil {
 		return nil, fmt.Errorf("dependency review API: %w", err)
 	}
