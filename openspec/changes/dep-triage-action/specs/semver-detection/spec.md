@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Detect semver bump type from PR content
-The system SHALL parse the PR title and body to determine the semver bump type of a dependency update. It SHALL support three-component versions (`v1.2.3`), two-component versions (`v1.2`), and digest-only changes (`abcdef0 -> 1234abc`). It SHALL recognize both ASCII arrows (`->`) and Unicode arrows (`→`) as version separators. When multiple version pairs are present, the system SHALL return the highest bump level across all pairs (major > minor > patch > digest > unknown).
+The system SHALL parse the PR title and body to determine the semver bump type of a dependency update. It SHALL support three-component versions (`v1.2.3`), two-component versions (`v1.2`), single-component versions (`v8`), and digest-only changes (`abcdef0 -> 1234abc`). It SHALL recognize both ASCII arrows (`->`) and Unicode arrows (`→`) as version separators. When multiple version pairs are present, the system SHALL return the highest bump level across all pairs (major > minor > patch > digest > unknown).
 
 #### Scenario: Three-component major bump
 - **WHEN** the PR body contains `` `v1.5.0` -> `v2.0.0` ``
@@ -37,6 +37,10 @@ The system SHALL parse the PR title and body to determine the semver bump type o
 
 #### Scenario: Unicode arrow separator (Renovate/MintMaker)
 - **WHEN** the PR body contains `` `v84.0.0` → `v85.0.0` `` (using the Unicode arrow `→`)
+- **THEN** the system SHALL detect the bump type as `major`
+
+#### Scenario: Single-component version bump (GitHub Actions tags)
+- **WHEN** the PR body contains `` `v8` → `v9` `` (single-component versions common in GitHub Actions)
 - **THEN** the system SHALL detect the bump type as `major`
 
 #### Scenario: Docker tag with build ID suffix
