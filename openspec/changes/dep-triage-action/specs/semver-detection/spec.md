@@ -47,6 +47,11 @@ The system SHALL parse the PR title and body to determine the semver bump type o
 - **WHEN** the PR body contains `` `18.5-alpine` → `18.6-alpine` ``
 - **THEN** the system SHALL return bump type `minor`
 
+#### Scenario: Renovate pinDigest update type
+- **WHEN** the PR body table contains a `pinDigest` update type (first-time SHA pinning with no version transition)
+- **THEN** the system SHALL return bump type `patch`
+- **RATIONALE:** pinDigest is a strictly safer reference format (mutable tag → immutable digest). These PRs have no version change and should be auto-approved like regular patches.
+
 ### Requirement: Apply semver labels to PR
 The system SHALL apply a color-coded label to the PR based on the detected bump type. Labels SHALL be created if they do not already exist.
 

@@ -168,8 +168,8 @@ func tryMergePR(ctx context.Context, client *ghclient.Client, prNumber int, dryR
 }
 
 const (
-	checkRetryAttempts = 5
-	checkRetryInterval = 60 * time.Second
+	checkRetryAttempts = 10
+	checkRetryInterval = 90 * time.Second
 )
 
 func waitForChecks(ctx context.Context, client *ghclient.Client, prNumber int, excludeWorkflow string) (ghclient.CheckStatus, error) {
