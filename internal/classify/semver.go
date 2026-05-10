@@ -30,6 +30,10 @@ var (
 	// Captures: (1)oldMaj (2)oldMin (3)oldPat? (4)oldSuffix? (5)newMaj (6)newMin (7)newPat? (8)newSuffix?
 	versionRe = regexp.MustCompile("[`]?v?([0-9]+)\\.([0-9]+)(?:\\.([0-9]+))?(?:[-.][`]?([^`\\s]*))?[`]?\\s*(?:->|→)\\s*[`]?v?([0-9]+)\\.([0-9]+)(?:\\.([0-9]+))?(?:[-.][`]?([^`\\s]*))?")
 
+	// Single-component version: v8 -> v9 (common in GitHub Actions tags)
+	// Captures: (1)oldMaj (2)newMaj
+	singleVersionRe = regexp.MustCompile("[`]?v([0-9]+)[`]?\\s*(?:->|→)\\s*[`]?v([0-9]+)[`]?")
+
 	// Digest-only: abcdef0 -> 1234abc
 	digestRe = regexp.MustCompile("[`]?([0-9a-f]{7,})[`]?\\s*(?:->|→)\\s*[`]?([0-9a-f]{7,})")
 
@@ -47,6 +51,18 @@ func DetectBumpType(title, body string) types.BumpType {
 		highest = maxBump(highest, bump)
 	}
 
+	if highest != types.BumpUnknown {
+		return highest
+	}
+
+	// Check single-component versions (e.g. v8 → v9)
+	for _, match := range singleVersionRe.FindAllStringSubmatch(text, -1) {
+		oldMaj := mustAtoi(match[1])
+		newMaj := mustAtoi(match[2])
+		if newMaj > oldMaj {
+			highest = maxBump(highest, types.BumpMajor)
+		}
+	}
 	if highest != types.BumpUnknown {
 		return highest
 	}
