@@ -137,7 +137,7 @@ jobs:
       contents: write
       pull-requests: write
       checks: read
-      statuses: read
+      statuses: read   # optional — if absent, legacy commit status check is skipped gracefully
     steps:
       - uses: actions/checkout@v6
       - uses: actions/create-github-app-token@v3

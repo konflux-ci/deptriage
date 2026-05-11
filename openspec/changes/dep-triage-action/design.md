@@ -281,3 +281,15 @@ The flag is threaded through the existing `Options` struct of each command packa
 **Alternatives considered:**
 - Wrap the GitHub client with a dry-run decorator — cleaner separation of concerns, but requires refactoring all callers to use an interface instead of a concrete `*Client`. The current codebase has ~6 distinct write methods; wrapping them adds a new interface, a new struct, and a constructor, for marginal benefit over inline guards. Not worth the refactor for this scope.
 - Check dry-run inside the GitHub client methods — conflates the client's responsibility (API access) with command policy (should we write?). The client should faithfully execute whatever it's told; the caller decides whether to call it.
+
+### 19. Graceful degradation for legacy commit status API
+
+`ChecksAllPassed` evaluates both GitHub Check Runs (modern API) and commit statuses (legacy API). The Check Runs API is the primary source — all Konflux CI systems (Red Hat Konflux pipeline, GitHub Actions) use modern check runs. The legacy Commit Status API is checked as a supplementary source for environments that use external CI integrations reporting via commit statuses.
+
+GitHub App tokens may not have the `statuses: read` permission required by the legacy API. When the API returns 403 "Resource not accessible by integration", the function logs a warning and evaluates only check runs — it does not treat the 403 as a CI failure. Other errors (network, 500) still propagate as failures.
+
+This approach was chosen after ESO PRs #19 and #20 failed to auto-merge: both had all check runs passing, but the deferred approval path hit a 403 on the legacy status API, causing the merge to be skipped entirely. Across all 6 deployed repos (namespace-lister, etcd-shield, oauth2-proxy, tekton-kueue, multi-platform-controller, external-secrets-operator), zero legacy commit statuses are in use.
+
+**Alternatives considered:**
+- Remove the legacy API call entirely — simpler, but would lose coverage for future adopters whose CI systems use the legacy commit status API. Deptriage is intended for wider adoption (other teams, agentic SDLC initiative), so preserving the capability is worthwhile.
+- Require `statuses: read` on the GitHub App — would fix the 403 but adds an installation requirement that most repos don't need. The graceful fallback makes the permission optional.

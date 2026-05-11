@@ -23,6 +23,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -227,9 +228,10 @@ const (
 	ChecksFailed                        // At least one check has failed
 )
 
-// ChecksAllPassed evaluates CI checks on the PR head SHA, excluding the specified
-// workflow name (to avoid self-referencing). Returns ChecksPassed, ChecksInProgress,
-// or ChecksFailed.
+// ChecksAllPassed evaluates CI check runs and legacy commit statuses on the PR head SHA,
+// excluding the specified workflow name (to avoid self-referencing). Returns ChecksPassed,
+// ChecksInProgress, or ChecksFailed. If the token lacks permission to read legacy commit
+// statuses (403), the legacy check is skipped gracefully.
 func (c *Client) ChecksAllPassed(ctx context.Context, prNumber int, excludeWorkflow string) (CheckStatus, error) {
 	pr, _, err := c.inner.PullRequests.Get(ctx, c.owner, c.repo, prNumber)
 	if err != nil {
@@ -267,22 +269,28 @@ func (c *Client) ChecksAllPassed(ctx context.Context, prNumber int, excludeWorkf
 		opts.Page = resp.NextPage
 	}
 
-	// Also check combined commit status (legacy status API)
-	status, _, err := c.inner.Repositories.GetCombinedStatus(ctx, c.owner, c.repo, ref, nil)
+	// Also check combined commit status (legacy status API).
+	// If the token lacks statuses:read permission (403), skip gracefully.
+	combinedStatus, resp, err := c.inner.Repositories.GetCombinedStatus(ctx, c.owner, c.repo, ref, nil)
 	if err != nil {
-		return ChecksFailed, fmt.Errorf("fetching combined status for %s: %w", ref, err)
-	}
-	for _, s := range status.Statuses {
-		if s.GetContext() == excludeWorkflow {
-			continue
+		if resp != nil && resp.StatusCode == http.StatusForbidden {
+			slog.Warn("commit status API not accessible, skipping legacy status check", "ref", ref)
+		} else {
+			return ChecksFailed, fmt.Errorf("fetching combined status for %s: %w", ref, err)
 		}
-		state := s.GetState()
-		if state == "pending" {
-			hasInProgress = true
-			continue
-		}
-		if state != "success" {
-			return ChecksFailed, nil
+	} else {
+		for _, s := range combinedStatus.Statuses {
+			if s.GetContext() == excludeWorkflow {
+				continue
+			}
+			state := s.GetState()
+			if state == "pending" {
+				hasInProgress = true
+				continue
+			}
+			if state != "success" {
+				return ChecksFailed, nil
+			}
 		}
 	}
 
