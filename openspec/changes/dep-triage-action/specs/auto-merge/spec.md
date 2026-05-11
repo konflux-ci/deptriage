@@ -47,7 +47,7 @@ Merge eligibility requires ALL of the following:
 #### Scenario: auto-approve labels not present
 - **WHEN** auto-merge is enabled, auto-approve is enabled, but the `approved` and `lgtm` labels are not present on the PR, and the PR is not eligible for deferred approval
 - **THEN** the system SHALL NOT merge the PR
-- **RATIONALE:** The absence of labels means the classify phase determined the PR is not eligible for auto-approval (e.g., major bump, gomod digest).
+- **RATIONALE:** The absence of labels means the classify phase determined the PR is not eligible for auto-approval (e.g., major bump).
 
 ### Requirement: Deferred approval for patches and minors with risk hints
 The system SHALL grant deferred approval for patch and minor bumps that were not auto-approved during classification due to risk hints, once all CI checks have passed. This enables safe auto-merge of updates like go-toolset rebuilds where the CI pipeline — not the risk hint — is the authoritative safety gate.
