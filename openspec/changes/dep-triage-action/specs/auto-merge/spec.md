@@ -8,7 +8,7 @@ Merge eligibility requires ALL of the following:
 2. The `auto-approve` flag is enabled (prerequisite)
 3. The `approved` and `lgtm` labels are present on the PR (applied by the classify phase)
 4. The AI risk level is NOT `high`
-5. All CI checks on the PR head SHA are `success` or `neutral` (excluding the deptriage workflow itself)
+5. All CI check runs on the PR head SHA are `success`, `neutral`, `skipped`, or `cancelled` (excluding the deptriage workflow itself). The system also evaluates legacy commit statuses when the token has `statuses: read` permission; if the permission is absent (403), the legacy check is skipped gracefully.
 
 #### Scenario: Approved PR with all checks passing and LOW risk
 - **WHEN** auto-merge is enabled, auto-approve is enabled, the PR has `approved` and `lgtm` labels, the AI risk level is `low`, and all CI checks pass
@@ -93,6 +93,21 @@ The system SHALL exclude its own workflow (the deptriage "Dependency Impact Anal
 - **WHEN** the system queries CI check status for the PR head SHA
 - **THEN** the system SHALL exclude any check run whose name matches the deptriage workflow name
 - **AND** evaluate only the remaining checks for pass/fail status
+
+### Requirement: Graceful degradation for legacy commit status API
+The system SHALL evaluate both GitHub Check Runs (modern API) and commit statuses (legacy API) when determining CI status. If the token lacks `statuses: read` permission and the legacy API returns a 403 error, the system SHALL log a warning and evaluate only check runs — it SHALL NOT treat the 403 as a CI failure.
+
+#### Scenario: Legacy commit status API not accessible
+- **WHEN** the system evaluates CI status and the legacy commit status API returns 403 "Resource not accessible by integration"
+- **THEN** the system SHALL log a warning indicating the legacy status check was skipped
+- **AND** evaluate merge eligibility based on check runs only
+- **AND** NOT treat the 403 as a check failure
+- **RATIONALE:** GitHub App tokens may not have `statuses: read` permission. All Konflux CI systems use modern check runs, so the legacy API is supplementary. Graceful degradation ensures deptriage works out of the box without requiring the permission, while preserving full coverage for environments that use legacy commit statuses.
+
+#### Scenario: Legacy commit status API accessible
+- **WHEN** the system evaluates CI status and the legacy commit status API is accessible
+- **THEN** the system SHALL include legacy commit statuses in the CI status evaluation alongside check runs
+- **RATIONALE:** Some CI systems (e.g., external integrations) may report status via the legacy API. When accessible, both sources should be evaluated for complete coverage.
 
 ### Requirement: Action interface for auto-merge
 The `action.yml` SHALL expose an `auto-merge` input, separate from the existing `auto-approve` input.
