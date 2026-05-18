@@ -28,7 +28,7 @@ import (
 	"github.com/konflux-ci/deptriage/internal/security"
 	"github.com/konflux-ci/deptriage/internal/types"
 
-	gh "github.com/google/go-github/v86/github"
+	gh "github.com/google/go-github/v87/github"
 	"golang.org/x/oauth2"
 )
 
