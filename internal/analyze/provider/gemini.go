@@ -26,7 +26,7 @@ import (
 )
 
 const (
-	geminiDefaultModel = "gemini-2.0-flash"
+	geminiDefaultModel = "gemini-3.5-flash"
 	geminiTimeout      = 120 * time.Second
 )
 
