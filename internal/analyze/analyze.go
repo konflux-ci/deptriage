@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strings"
 
 	"github.com/konflux-ci/deptriage/internal/analyze/provider"
 	ghclient "github.com/konflux-ci/deptriage/internal/github"
@@ -110,12 +111,16 @@ func Run(ctx context.Context, opts Options) (types.RiskLevel, error) {
 	// Apply risk label
 	applyRiskLabel(ctx, client, opts.PRNumber, riskLevel, opts.DryRun)
 
-	// Submit review if applicable
-	submitReview(ctx, client, opts, riskLevel, response)
+	hasSupplyChainConcern := len(classifyResult.SupplyChainFindings) > 0
 
-	// Auto-merge if eligible
-	if shouldAttemptMerge(opts.AutoMerge, opts.AutoApprove, riskLevel) {
+	// Submit review if applicable (skip APPROVE when supply-chain concerns exist)
+	submitReview(ctx, client, opts, riskLevel, response, hasSupplyChainConcern)
+
+	// Auto-merge if eligible (skip when supply-chain concerns exist)
+	if !hasSupplyChainConcern && shouldAttemptMerge(opts.AutoMerge, opts.AutoApprove, riskLevel) {
 		tryMerge(ctx, client, opts)
+	} else if hasSupplyChainConcern && opts.AutoMerge {
+		slog.Info("skipping auto-merge: supply-chain concerns detected", types.LogKeyPR, opts.PRNumber)
 	}
 
 	return riskLevel, nil
@@ -165,12 +170,26 @@ func shouldAttemptMerge(autoMerge, autoApprove bool, risk types.RiskLevel) bool 
 const deptriageCheckName = "Triage dependency PR"
 
 func tryMerge(ctx context.Context, client *ghclient.Client, opts Options) {
-	hasLabels, err := client.HasLabels(ctx, opts.PRNumber, []string{types.LabelApproved, types.LabelLGTM})
+	pr, err := client.FetchPR(ctx, opts.PRNumber)
 	if err != nil {
-		slog.Warn("failed to check PR labels for auto-merge", "error", err)
+		slog.Warn("failed to fetch PR labels for auto-merge", "error", err)
 		return
 	}
-	if !hasLabels {
+	hasApproved := false
+	hasLGTM := false
+	for _, l := range pr.Labels {
+		if strings.HasPrefix(l, types.SupplyChainLabelPrefix) {
+			slog.Info("skipping auto-merge: supply-chain label present on PR", types.LogKeyLabel, l, types.LogKeyPR, opts.PRNumber)
+			return
+		}
+		if l == types.LabelApproved {
+			hasApproved = true
+		}
+		if l == types.LabelLGTM {
+			hasLGTM = true
+		}
+	}
+	if !hasApproved || !hasLGTM {
 		slog.Info("skipping auto-merge: approved/lgtm labels not present")
 		return
 	}
@@ -198,8 +217,8 @@ func tryMerge(ctx context.Context, client *ghclient.Client, opts Options) {
 	slog.Info("PR merged successfully", types.LogKeyPR, opts.PRNumber)
 }
 
-func submitReview(ctx context.Context, client *ghclient.Client, opts Options, risk types.RiskLevel, body string) {
-	if risk == types.RiskLow && opts.AutoApprove {
+func submitReview(ctx context.Context, client *ghclient.Client, opts Options, risk types.RiskLevel, body string, hasSupplyChainConcern bool) {
+	if risk == types.RiskLow && opts.AutoApprove && !hasSupplyChainConcern {
 		if opts.DryRun {
 			slog.Info("[DRY-RUN] would submit review", types.LogKeyEvent, types.ReviewApprove, types.LogKeyPR, opts.PRNumber)
 			return

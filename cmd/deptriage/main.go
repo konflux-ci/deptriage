@@ -21,6 +21,7 @@ import (
 	"log/slog"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -30,13 +31,16 @@ import (
 )
 
 const (
-	flagProvider       = "provider"
-	flagAPIKey         = "api-key"
-	flagModel          = "model"
-	flagAutoApprove    = "auto-approve"
-	flagAutoMerge      = "auto-merge"
-	flagClassifyOutput = "classify-output"
-	flagDryRun         = "dry-run"
+	flagProvider        = "provider"
+	flagAPIKey          = "api-key"
+	flagModel           = "model"
+	flagAutoApprove     = "auto-approve"
+	flagAutoMerge       = "auto-merge"
+	flagClassifyOutput  = "classify-output"
+	flagDryRun          = "dry-run"
+	flagTrustedBot      = "trusted-bot"
+	flagSuspiciousPath  = "suspicious-path"
+	flagExpectedFile    = "expected-file"
 )
 
 var (
@@ -95,6 +99,9 @@ func init() {
 	// Classify-specific flags
 	classifyCmd.Flags().StringVar(&outputFile, "output", "/tmp/deptriage-classify.json", "Output file for classify result JSON")
 	classifyCmd.Flags().Bool(flagAutoApprove, envBool("INPUT_AUTO_APPROVE"), "Apply approved/lgtm labels for eligible patches")
+	classifyCmd.Flags().StringSlice(flagTrustedBot, envStringSlice("INPUT_TRUSTED_BOTS"), "Additional trusted bot logins (added to defaults)")
+	classifyCmd.Flags().StringSlice(flagSuspiciousPath, envStringSlice("INPUT_SUSPICIOUS_PATHS"), "Additional suspicious path prefixes (added to defaults)")
+	classifyCmd.Flags().StringSlice(flagExpectedFile, envStringSlice("INPUT_EXPECTED_FILES"), "Additional expected file patterns for scope validation (added to defaults)")
 
 	// Analyze-specific flags
 	analyzeCmd.Flags().String(flagProvider, envStr("INPUT_LLM_PROVIDER", "gemini"), "LLM provider (gemini, claude)")
@@ -117,14 +124,20 @@ func init() {
 func runClassify(cmd *cobra.Command, args []string) error {
 	autoApprove, _ := cmd.Flags().GetBool(flagAutoApprove)
 	dryRun, _ := cmd.Flags().GetBool(flagDryRun)
+	trustedBots, _ := cmd.Flags().GetStringSlice(flagTrustedBot)
+	suspiciousPaths, _ := cmd.Flags().GetStringSlice(flagSuspiciousPath)
+	expectedFiles, _ := cmd.Flags().GetStringSlice(flagExpectedFile)
 
 	result, err := classify.Run(cmd.Context(), classify.Options{
-		PRNumber:    prNumber,
-		Repo:        repo,
-		Token:       githubToken,
-		OutputFile:  outputFile,
-		AutoApprove: autoApprove,
-		DryRun:      dryRun,
+		PRNumber:        prNumber,
+		Repo:            repo,
+		Token:           githubToken,
+		OutputFile:      outputFile,
+		AutoApprove:     autoApprove,
+		DryRun:          dryRun,
+		TrustedBots:     trustedBots,
+		SuspiciousPaths: suspiciousPaths,
+		ExpectedFiles:   expectedFiles,
 	})
 	if err != nil {
 		return err
@@ -227,4 +240,19 @@ func envInt(key string, fallback int) int {
 
 func envBool(key string) bool {
 	return os.Getenv(key) == "true"
+}
+
+func envStringSlice(key string) []string {
+	v := os.Getenv(key)
+	if v == "" {
+		return nil
+	}
+	var result []string
+	for _, s := range strings.Split(v, ",") {
+		s = strings.TrimSpace(s)
+		if s != "" {
+			result = append(result, s)
+		}
+	}
+	return result
 }

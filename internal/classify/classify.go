@@ -31,12 +31,15 @@ import (
 
 // Options configures the classify pipeline.
 type Options struct {
-	PRNumber    int
-	Repo        string
-	Token       string
-	OutputFile  string
-	AutoApprove bool
-	DryRun      bool
+	PRNumber        int
+	Repo            string
+	Token           string
+	OutputFile      string
+	AutoApprove     bool
+	DryRun          bool
+	TrustedBots     []string
+	SuspiciousPaths []string
+	ExpectedFiles   []string
 }
 
 // Run executes the full classification pipeline.
@@ -82,6 +85,71 @@ func Run(ctx context.Context, opts Options) (*types.ClassifyResult, error) {
 		}
 	}
 
+	// Supply-chain validation: author, suspicious files, diff scope
+	var supplyChainFindings []*SupplyChainFinding
+	isBotPR := IsTrustedBot(pr.Author, opts.TrustedBots)
+
+	if isBotPR {
+		commits, err := client.FetchPRCommits(ctx, opts.PRNumber)
+		if err != nil {
+			slog.Warn("failed to fetch PR commits, treating as supply-chain concern (fail-closed)", "error", err)
+			supplyChainFindings = append(supplyChainFindings, &SupplyChainFinding{
+				Key:       "SUPPLY_CHAIN_VERIFICATION_FAILED",
+				Label:     types.LabelSupplyChainAuthorMismatch,
+				Color:     types.ColorRed,
+				LabelDesc: "Could not verify PR commit authors",
+				Message:   "Failed to fetch PR commits for author validation: " + err.Error(),
+			})
+		} else {
+			if f := ValidateAuthor(pr.Author, commits, opts.TrustedBots); f != nil {
+				supplyChainFindings = append(supplyChainFindings, f)
+			}
+		}
+	}
+
+	prFiles, err := client.FetchPRFiles(ctx, opts.PRNumber)
+	if err != nil {
+		slog.Warn("failed to fetch PR files, treating as supply-chain concern (fail-closed)", "error", err)
+		if isBotPR {
+			supplyChainFindings = append(supplyChainFindings, &SupplyChainFinding{
+				Key:       "SUPPLY_CHAIN_VERIFICATION_FAILED",
+				Label:     types.LabelSupplyChainSuspiciousFiles,
+				Color:     types.ColorRed,
+				LabelDesc: "Could not verify PR changed files",
+				Message:   "Failed to fetch PR files for supply-chain validation: " + err.Error(),
+			})
+		}
+	} else {
+		if f := DetectSuspiciousFiles(prFiles, opts.SuspiciousPaths); f != nil {
+			supplyChainFindings = append(supplyChainFindings, f)
+		}
+		if f := ValidateDiffScope(pr.Author, prFiles, opts.TrustedBots, opts.ExpectedFiles); f != nil {
+			supplyChainFindings = append(supplyChainFindings, f)
+		}
+	}
+
+	labelFailed := false
+	for _, finding := range supplyChainFindings {
+		slog.Warn("supply-chain concern detected", "key", finding.Key, "details", finding.Details)
+		if opts.DryRun {
+			slog.Info("[DRY-RUN] would apply supply-chain label", types.LogKeyLabel, finding.Label, types.LogKeyPR, opts.PRNumber)
+			continue
+		}
+		if err := client.EnsureLabel(ctx, opts.PRNumber, finding.Label, finding.Color, finding.LabelDesc); err != nil {
+			slog.Warn("failed to apply supply-chain label", types.LogKeyLabel, finding.Label, "error", err)
+			labelFailed = true
+		}
+	}
+	if labelFailed && isBotPR {
+		slog.Warn("supply-chain label application failed, removing approved/lgtm as fallback", types.LogKeyPR, opts.PRNumber)
+		for _, label := range []string{types.LabelApproved, types.LabelLGTM} {
+			if err := client.RemoveLabel(ctx, opts.PRNumber, label); err != nil {
+				slog.Warn("failed to remove label during supply-chain fallback", types.LogKeyLabel, label, "error", err)
+			}
+		}
+	}
+	hasSupplyChainConcern := len(supplyChainFindings) > 0
+
 	// Determine the dominant ecosystem across all packages
 	ecosystem := dominantEcosystem(packages)
 
@@ -116,22 +184,33 @@ func Run(ctx context.Context, opts Options) (*types.ClassifyResult, error) {
 		}
 	}
 
+	var scResults []types.SupplyChainFindingResult
+	for _, f := range supplyChainFindings {
+		scResults = append(scResults, types.SupplyChainFindingResult{
+			Key:     f.Key,
+			Label:   f.Label,
+			Message: f.Message,
+			Details: f.Details,
+		})
+	}
+
 	result := &types.ClassifyResult{
-		BumpType:  bumpType,
-		Packages:  packages,
-		RiskHints: riskHints,
-		PRTitle:   pr.Title,
-		PRBody:    pr.Body,
-		Repo:      opts.Repo,
-		PRNumber:  opts.PRNumber,
-		Label:     appliedLabel,
+		BumpType:            bumpType,
+		Packages:            packages,
+		RiskHints:           riskHints,
+		SupplyChainFindings: scResults,
+		PRTitle:             pr.Title,
+		PRBody:              pr.Body,
+		Repo:                opts.Repo,
+		PRNumber:            opts.PRNumber,
+		Label:               appliedLabel,
 	}
 
 	// Auto-approve eligible patches, minors, and digests by applying approved/lgtm labels.
 	isAutoApproveEligible := bumpType == types.BumpPatch ||
 		bumpType == types.BumpMinor ||
 		bumpType == types.BumpDigest
-	if opts.AutoApprove && isAutoApproveEligible && riskHints == "" {
+	if opts.AutoApprove && isAutoApproveEligible && riskHints == "" && !hasSupplyChainConcern {
 		slog.Info("applying auto-approve labels for eligible PR")
 		for _, label := range []string{types.LabelApproved, types.LabelLGTM} {
 			if opts.DryRun {

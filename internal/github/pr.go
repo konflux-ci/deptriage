@@ -300,6 +300,63 @@ func (c *Client) ChecksAllPassed(ctx context.Context, prNumber int, excludeWorkf
 	return ChecksPassed, nil
 }
 
+// CommitInfo holds the author login and SHA of a single commit.
+type CommitInfo struct {
+	SHA    string
+	Author string
+}
+
+// FetchPRCommits returns the author login and SHA for every commit on a PR.
+func (c *Client) FetchPRCommits(ctx context.Context, prNumber int) ([]CommitInfo, error) {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	opts := &gh.ListOptions{PerPage: 100}
+	var result []CommitInfo
+	for {
+		commits, resp, err := c.inner.PullRequests.ListCommits(ctx, c.owner, c.repo, prNumber, opts)
+		if err != nil {
+			return nil, fmt.Errorf("listing commits for PR #%d: %w", prNumber, err)
+		}
+		for _, commit := range commits {
+			author := ""
+			if commit.GetAuthor() != nil {
+				author = commit.GetAuthor().GetLogin()
+			}
+			result = append(result, CommitInfo{
+				SHA:    commit.GetSHA(),
+				Author: author,
+			})
+		}
+		if resp.NextPage == 0 {
+			break
+		}
+		opts.Page = resp.NextPage
+	}
+	return result, nil
+}
+
+// FetchPRFiles returns the file paths changed in a PR.
+func (c *Client) FetchPRFiles(ctx context.Context, prNumber int) ([]string, error) {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	opts := &gh.ListOptions{PerPage: 100}
+	var result []string
+	for {
+		files, resp, err := c.inner.PullRequests.ListFiles(ctx, c.owner, c.repo, prNumber, opts)
+		if err != nil {
+			return nil, fmt.Errorf("listing files for PR #%d: %w", prNumber, err)
+		}
+		for _, f := range files {
+			result = append(result, f.GetFilename())
+		}
+		if resp.NextPage == 0 {
+			break
+		}
+		opts.Page = resp.NextPage
+	}
+	return result, nil
+}
+
 // HasLabels returns true if the PR has all the specified labels.
 func (c *Client) HasLabels(ctx context.Context, prNumber int, labels []string) (bool, error) {
 	pr, err := c.FetchPR(ctx, prNumber)

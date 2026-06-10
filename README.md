@@ -19,6 +19,10 @@ to help reviewers prioritize their work.
   coverage detection
 - **Risk detection** -- pattern-based heuristics for Go toolchain updates, Go
   version bumps, and container image changes
+- **Supply-chain hardening** -- validates bot PR author identity against commit
+  authors, detects changes to known attack vector paths (`.claude/`, `.vscode/`,
+  `.github/workflows/`), and verifies dependency PRs only touch expected files;
+  blocks auto-approve, auto-merge, and deferred approval when concerns are found
 - **Security advisories** -- queries GitHub Global Security Advisories API and
   optionally runs `govulncheck` for reachability analysis
 - **LLM impact analysis** -- assembles structured context and calls Gemini or
@@ -51,10 +55,10 @@ inline merge attempt at the end.
 ```
 cmd/deptriage/         CLI entrypoint (cobra)
 internal/
-  classify/            Semver detection, package extraction, risk hints
+  classify/            Semver detection, package extraction, risk hints, supply-chain validation
   analyze/             Context assembly, prompt rendering, LLM providers
   merge/               Auto-merge eligibility, deferred approval, APPROVE + merge
-  github/              GitHub API client (labels, comments, reviews, merge, dep review)
+  github/              GitHub API client (labels, comments, reviews, merge, dep review, PR commits/files)
   imports/             go mod tools and source file scanning
   security/            Advisories, govulncheck, secret redaction
   types/               Shared types
@@ -153,6 +157,83 @@ jobs:
 ```
 
 See `.github/workflows/example-dep-triage-and-auto-merge.yaml` for a ready-to-copy example.
+
+### Action inputs
+
+| Input | Default | Description |
+|-------|---------|-------------|
+| `command` | `both` | Command to run: `classify`, `analyze`, `both`, or `merge` |
+| `pr-number` | `0` | Pull request number |
+| `github-token` | `${{ github.token }}` | GitHub token for API operations |
+| `api-key` | | LLM provider API key (required for `analyze`) |
+| `llm-provider` | `gemini` | LLM provider: `gemini` or `claude` |
+| `llm-model` | | LLM model name (provider-dependent default) |
+| `auto-approve` | `false` | Apply `approved`/`lgtm` labels for eligible low-risk patches and minors |
+| `auto-merge` | `false` | Merge eligible PRs after analysis (requires `auto-approve`) |
+| `dry-run` | `false` | Suppress all GitHub API writes; log what would happen |
+| `head-sha` | | Head SHA to find PRs for (used by `merge` with `check_suite` trigger) |
+| `trusted-bots` | | Comma-separated additional trusted bot logins (added to defaults) |
+| `suspicious-paths` | | Comma-separated additional suspicious path prefixes (added to defaults) |
+| `expected-files` | | Comma-separated additional expected file patterns for scope validation (added to defaults) |
+
+## Supply-Chain Hardening
+
+deptriage includes three supply-chain validators that run automatically during
+classification. These are always-on with no flag to disable.
+
+### PR author validation
+
+Verifies that the PR was opened by a recognized dependency bot and that **every
+commit** on the PR was authored by the same bot identity. If any commit comes
+from a different author, the PR is flagged with a `supply-chain/author-mismatch`
+label and blocked from auto-approve and auto-merge.
+
+Default trusted bots: `renovate[bot]`, `red-hat-konflux[bot]`, `dependabot[bot]`.
+Add custom bot logins via the `trusted-bots` input.
+
+### Suspicious file detection
+
+Inspects the list of changed files for known attack vectors:
+- `.claude/` -- known malware vector
+- `.vscode/` -- known attack vector
+- `.github/workflows/` -- CI/CD pipeline tampering
+- `.github/actions/` -- CI/CD action tampering
+- Executable scripts (`.sh`, `.mjs`, `.js`, `.py`, `.rb`, `.pl`) outside
+  vendored directories
+
+Matches trigger the `supply-chain/suspicious-files` label. Add custom path
+prefixes via the `suspicious-paths` input.
+
+### Diff scope validation
+
+Verifies that dependency PRs only touch files expected for a legitimate
+dependency update (manifests, lock files, vendored code, Tekton task refs).
+Changes outside the expected scope trigger `supply-chain/unexpected-scope`.
+
+Default expected patterns include `go.mod`, `go.sum`, `Dockerfile`,
+`Containerfile`, `vendor/`, `.tekton/`, `renovate.json`, and common package
+manager manifests. Add custom patterns via the `expected-files` input.
+
+### Behavior
+
+- Supply-chain labels are **red** (`#e11d48`) to distinguish from yellow
+  `risk-hint/*` labels
+- Any supply-chain finding blocks auto-approve in the classify phase
+- The analyze phase skips formal `APPROVE` reviews when supply-chain findings
+  exist, even if the LLM assesses LOW risk
+- The merge phase rejects PRs with any `supply-chain/*` label, on both the
+  primary merge path and the deferred-approval path
+- API errors during commit or file fetch are **fail-closed** for bot PRs --
+  the PR is treated as having a supply-chain concern and auto-approve is
+  blocked. Human PRs are unaffected since they have no auto-merge path
+- If a supply-chain label cannot be applied (API error, permissions), any
+  existing `approved`/`lgtm` labels are removed as a fallback to prevent
+  stale approval from letting a tampered PR merge
+- All checks operate on the PR metadata and file list, not file contents --
+  content-based scanning is a non-goal
+- Running `deptriage analyze` standalone (without a prior `classify` step)
+  skips supply-chain checks -- always use `both` or run `classify` first to
+  ensure tamper protection is active
 
 ## Building
 

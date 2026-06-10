@@ -25,6 +25,11 @@ const (
 	LabelSemverMinor = "semver/minor"
 
 	RiskHintLabelPrefix = "risk-hint/"
+
+	LabelSupplyChainAuthorMismatch  = "supply-chain/author-mismatch"
+	LabelSupplyChainSuspiciousFiles = "supply-chain/suspicious-files"
+	LabelSupplyChainUnexpectedScope = "supply-chain/unexpected-scope"
+	SupplyChainLabelPrefix          = "supply-chain/"
 )
 
 // Well-known label colors.
@@ -149,16 +154,25 @@ const (
 	RiskUnknown RiskLevel = "unknown"
 )
 
+// SupplyChainFindingResult is a serializable supply-chain finding for ClassifyResult.
+type SupplyChainFindingResult struct {
+	Key     string   `json:"key"`
+	Label   string   `json:"label"`
+	Message string   `json:"message"`
+	Details []string `json:"details,omitempty"`
+}
+
 // ClassifyResult is the output of the classify subcommand.
 type ClassifyResult struct {
-	BumpType  BumpType         `json:"bumpType"`
-	Packages  []PackageInfo    `json:"packages"`
-	RiskHints string           `json:"riskHints"`
-	PRTitle   string           `json:"prTitle"`
-	PRBody    string           `json:"prBody"`
-	Repo      string           `json:"repo"`
-	PRNumber  int              `json:"prNumber"`
-	Label     string           `json:"label,omitempty"`
+	BumpType             BumpType                   `json:"bumpType"`
+	Packages             []PackageInfo              `json:"packages"`
+	RiskHints            string                     `json:"riskHints"`
+	SupplyChainFindings  []SupplyChainFindingResult  `json:"supplyChainFindings,omitempty"`
+	PRTitle              string                     `json:"prTitle"`
+	PRBody               string                     `json:"prBody"`
+	Repo                 string                     `json:"repo"`
+	PRNumber             int                        `json:"prNumber"`
+	Label                string                     `json:"label,omitempty"`
 }
 
 // PackageInfo holds extracted package metadata from the PR.
@@ -210,7 +224,8 @@ type PackageContext struct {
 
 // ContextJSON is the full context assembled for LLM consumption.
 type ContextJSON struct {
-	PRBody    string           `json:"prBody"`
-	Packages  []PackageContext `json:"packages"`
-	RiskHints string           `json:"riskHints,omitempty"`
+	PRBody              string                     `json:"prBody"`
+	Packages            []PackageContext            `json:"packages"`
+	RiskHints           string                     `json:"riskHints,omitempty"`
+	SupplyChainFindings []SupplyChainFindingResult  `json:"supplyChainFindings,omitempty"`
 }

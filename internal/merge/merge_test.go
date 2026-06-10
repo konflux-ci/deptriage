@@ -64,6 +64,21 @@ func TestIsMergeEligible(t *testing.T) {
 			labels: nil,
 			want:   false,
 		},
+		{
+			name:   "supply-chain/author-mismatch blocks merge even with approved+lgtm",
+			labels: []string{"approved", "lgtm", "supply-chain/author-mismatch"},
+			want:   false,
+		},
+		{
+			name:   "supply-chain/suspicious-files blocks merge even with approved+lgtm",
+			labels: []string{"approved", "lgtm", "supply-chain/suspicious-files"},
+			want:   false,
+		},
+		{
+			name:   "supply-chain/unexpected-scope blocks merge even with approved+lgtm",
+			labels: []string{"approved", "lgtm", "supply-chain/unexpected-scope"},
+			want:   false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -121,6 +136,21 @@ func TestIsDeferredApprovalEligible(t *testing.T) {
 			name:   "already approved not reached",
 			labels: []string{"semver/patch", "risk-hint/go-toolchain", "approved", "lgtm"},
 			want:   true,
+		},
+		{
+			name:   "supply-chain author mismatch blocks deferred approval",
+			labels: []string{"semver/patch", "risk-hint/go-toolchain", "supply-chain/author-mismatch"},
+			want:   false,
+		},
+		{
+			name:   "supply-chain suspicious files blocks deferred approval",
+			labels: []string{"semver/patch", "risk-hint/go-toolchain", "supply-chain/suspicious-files"},
+			want:   false,
+		},
+		{
+			name:   "supply-chain unexpected scope blocks deferred approval",
+			labels: []string{"semver/minor", "risk-hint/go-toolchain", "supply-chain/unexpected-scope"},
+			want:   false,
 		},
 	}
 
