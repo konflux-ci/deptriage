@@ -25,6 +25,7 @@
 # CI
 !.github/
 !.github/**
+!.codecov.yml
 
 # OpenSpec
 !openspec/
