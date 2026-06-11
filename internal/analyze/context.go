@@ -32,8 +32,9 @@ import (
 // GatherContext assembles the full context JSON for LLM consumption.
 func GatherContext(ctx context.Context, result *types.ClassifyResult, ghClient *ghclient.Client, rawGHClient *gh.Client, workDir string) *types.ContextJSON {
 	ctxJSON := &types.ContextJSON{
-		PRBody:    result.PRBody,
-		RiskHints: result.RiskHints,
+		PRBody:              result.PRBody,
+		RiskHints:           result.RiskHints,
+		SupplyChainFindings: result.SupplyChainFindings,
 	}
 
 	goAvailable := imports.GoAvailable(workDir)

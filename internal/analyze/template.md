@@ -14,6 +14,16 @@ The context may include a `riskHints` field with warnings about known risk patte
 - **GO_VERSION_BUMP**: Changes to the `go` directive in go.mod can break CI builds if the build image uses an older Go version. Default to at least MEDIUM risk.
 - **CONTAINER_IMAGE_UPDATE**: Base image changes can affect build behavior and binary compatibility. However, if the Konflux CI pipeline passes, the build is proven compatible. Default to MEDIUM risk.
 
+## Supply-Chain Integrity
+
+The context may include a `supplyChainFindings` field with findings from automated tamper detection. If this field is present and non-empty, **this PR has failed supply-chain validation** — treat it as HIGH risk regardless of what the changelog or code analysis suggests. Do NOT recommend merging.
+
+Possible findings:
+- **SUPPLY_CHAIN_AUTHOR_MISMATCH**: One or more commits on this PR were authored by an identity other than the bot that opened it. This is a strong indicator of tampering.
+- **SUPPLY_CHAIN_SUSPICIOUS_FILES**: The PR modifies files associated with known attack vectors (e.g., `.claude/`, `.vscode/`, CI/CD workflows). Dependency updates should not touch these paths.
+- **SUPPLY_CHAIN_UNEXPECTED_SCOPE**: The PR modifies files outside the expected scope for a dependency update (e.g., source code, scripts). Legitimate dependency PRs only change manifests, lock files, and vendored code.
+- **SUPPLY_CHAIN_VERIFICATION_FAILED**: The system could not verify commit authors or changed files due to an API error. The PR should be treated as potentially compromised until verified manually.
+
 ## Your Task
 
 Analyze the dependency update and produce a risk assessment. For each package in the context:
@@ -24,6 +34,7 @@ Analyze the dependency update and produce a risk assessment. For each package in
 4. **Evaluate test coverage**: Note whether the affected files have tests.
 5. **Check risk hints**: If the context includes `riskHints`, factor these known high-risk patterns into your assessment. These take precedence over what the changelog alone suggests.
 6. **Check security advisories**: If the context includes `advisories` or `govulncheck` data, factor these into risk assessment. Reachable vulnerabilities should increase risk level.
+7. **Check supply-chain integrity**: If the context includes `supplyChainFindings`, this PR has failed tamper detection. Set risk to HIGH and do NOT recommend merging.
 
 ## Output Format
 
@@ -42,6 +53,9 @@ Respond with ONLY the following markdown structure (no preamble, no extra text):
 
 ### Security Assessment
 [If security advisories or govulncheck results are present, summarize findings. Note whether vulnerabilities are reachable in our codebase.]
+
+### Supply-Chain Assessment
+[If supplyChainFindings is present, list each finding and its details. If no findings exist, state "No supply-chain concerns detected."]
 
 ### Recommended Action
 [One of:

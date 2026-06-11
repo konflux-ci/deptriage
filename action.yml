@@ -41,6 +41,15 @@ inputs:
   head-sha:
     description: "Head SHA to find PRs for (used by merge command with check_suite trigger)"
     required: false
+  trusted-bots:
+    description: "Comma-separated list of additional trusted bot logins for supply-chain validation (added to defaults: renovate[bot], red-hat-konflux[bot], dependabot[bot])"
+    required: false
+  suspicious-paths:
+    description: "Comma-separated list of additional suspicious path prefixes for supply-chain validation (added to defaults: .claude/, .vscode/, .github/workflows/, .github/actions/)"
+    required: false
+  expected-files:
+    description: "Comma-separated list of additional expected file patterns for dependency PR scope validation (added to defaults: go.mod, go.sum, vendor/, .tekton/, etc.)"
+    required: false
 
 outputs:
   bump-type:
@@ -65,6 +74,9 @@ runs:
     INPUT_AUTO_MERGE: ${{ inputs.auto-merge }}
     INPUT_DRY_RUN: ${{ inputs.dry-run }}
     INPUT_HEAD_SHA: ${{ inputs.head-sha }}
+    INPUT_TRUSTED_BOTS: ${{ inputs.trusted-bots }}
+    INPUT_SUSPICIOUS_PATHS: ${{ inputs.suspicious-paths }}
+    INPUT_EXPECTED_FILES: ${{ inputs.expected-files }}
 
 branding:
   icon: "shield"

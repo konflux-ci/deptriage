@@ -68,18 +68,23 @@ func runForSHA(ctx context.Context, client *ghclient.Client, opts Options) error
 }
 
 // isMergeEligible checks if the PR labels indicate merge eligibility.
-// Returns true if approved + lgtm are present and risk/high is not.
+// Returns true if approved + lgtm are present and neither risk/high nor any
+// supply-chain/* label is present.
 func isMergeEligible(labels []string) bool {
 	labelSet := make(map[string]bool, len(labels))
 	for _, l := range labels {
 		labelSet[l] = true
+		if strings.HasPrefix(l, types.SupplyChainLabelPrefix) {
+			return false
+		}
 	}
 	return labelSet[types.LabelApproved] && labelSet[types.LabelLGTM] && !labelSet[types.LabelRiskHigh]
 }
 
 // isDeferredApprovalEligible checks if the PR is eligible for deferred approval:
 // a patch or minor bump with risk hints that wasn't auto-approved early, but can
-// be approved now that CI has proven the build is safe.
+// be approved now that CI has proven the build is safe. PRs with supply-chain
+// labels are excluded — passing CI does not prove a tampered PR is safe.
 func isDeferredApprovalEligible(labels []string) bool {
 	labelSet := make(map[string]bool, len(labels))
 	hasRiskHint := false
@@ -87,6 +92,9 @@ func isDeferredApprovalEligible(labels []string) bool {
 		labelSet[l] = true
 		if strings.HasPrefix(l, types.RiskHintLabelPrefix) {
 			hasRiskHint = true
+		}
+		if strings.HasPrefix(l, types.SupplyChainLabelPrefix) {
+			return false
 		}
 	}
 	isPatchOrMinor := labelSet[types.LabelSemverPatch] || labelSet[types.LabelSemverMinor]
