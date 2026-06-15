@@ -178,7 +178,7 @@ See `.github/workflows/example-dep-triage-and-auto-merge.yaml` for a ready-to-co
 
 ## Supply-Chain Hardening
 
-deptriage includes three supply-chain validators that run automatically during
+deptriage includes four supply-chain validators that run automatically during
 classification. These are always-on with no flag to disable.
 
 ### PR author validation
@@ -211,13 +211,26 @@ dependency update (manifests, lock files, vendored code, Tekton task refs).
 Changes outside the expected scope trigger `supply-chain/unexpected-scope`.
 
 Default expected patterns include `go.mod`, `go.sum`, `Dockerfile`,
-`Containerfile`, `vendor/`, `.tekton/`, `renovate.json`, and common package
-manager manifests. Add custom patterns via the `expected-files` input.
+`Containerfile`, `vendor/`, `.tekton/`, `.gitmodules`, `renovate.json`, and
+common package manager manifests. Add custom patterns via the `expected-files`
+input.
+
+### Submodule update detection
+
+When a dependency PR modifies `.gitmodules`, deptriage fetches the repository
+tree to identify git submodule paths (entries with mode `160000`). Changed
+submodule pointers are excluded from diff scope validation (they are not
+flagged as `supply-chain/unexpected-scope`), but a
+`supply-chain/submodule-update` label is applied instead. This label still
+blocks auto-approve and auto-merge -- submodule updates bring in entire
+upstream codebases where passing CI alone does not guarantee safety, so an
+engineer must review the upstream changes.
 
 ### Behavior
 
 - Supply-chain labels are **red** (`#e11d48`) to distinguish from yellow
-  `risk-hint/*` labels
+  `risk-hint/*` labels, except `supply-chain/submodule-update` which is
+  **yellow** (`#fbca04`) since it is a caution rather than an attack indicator
 - Any supply-chain finding blocks auto-approve in the classify phase
 - The analyze phase skips formal `APPROVE` reviews when supply-chain findings
   exist, even if the LLM assesses LOW risk

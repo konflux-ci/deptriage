@@ -29,6 +29,7 @@ const (
 	LabelSupplyChainAuthorMismatch  = "supply-chain/author-mismatch"
 	LabelSupplyChainSuspiciousFiles = "supply-chain/suspicious-files"
 	LabelSupplyChainUnexpectedScope = "supply-chain/unexpected-scope"
+	LabelSupplyChainSubmoduleUpdate = "supply-chain/submodule-update"
 	SupplyChainLabelPrefix          = "supply-chain/"
 )
 

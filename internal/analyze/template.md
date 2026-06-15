@@ -22,6 +22,7 @@ Possible findings:
 - **SUPPLY_CHAIN_AUTHOR_MISMATCH**: One or more commits on this PR were authored by an identity other than the bot that opened it. This is a strong indicator of tampering.
 - **SUPPLY_CHAIN_SUSPICIOUS_FILES**: The PR modifies files associated with known attack vectors (e.g., `.claude/`, `.vscode/`, CI/CD workflows). Dependency updates should not touch these paths.
 - **SUPPLY_CHAIN_UNEXPECTED_SCOPE**: The PR modifies files outside the expected scope for a dependency update (e.g., source code, scripts). Legitimate dependency PRs only change manifests, lock files, and vendored code.
+- **SUPPLY_CHAIN_SUBMODULE_UPDATE**: The PR updates one or more git submodules. Submodule updates bring in upstream codebases where passing CI alone does not guarantee safety — an engineer must review the upstream changes for incompatibilities or unexpected modifications. Do NOT recommend auto-merging.
 - **SUPPLY_CHAIN_VERIFICATION_FAILED**: The system could not verify commit authors or changed files due to an API error. The PR should be treated as potentially compromised until verified manually.
 
 ## Your Task

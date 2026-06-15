@@ -19,6 +19,7 @@ With deptriage's auto-approve and auto-merge capabilities, a tampered Renovate/M
 - `pr-author-validation`: Validate that the PR was opened by a recognized dependency bot (`renovate[bot]`, `red-hat-konflux[bot]`, `dependabot[bot]`) and that the most recent commit on the PR branch was authored by the same bot identity. Flag mismatches as HIGH risk with a `supply-chain/author-mismatch` label.
 - `suspicious-file-detection`: Inspect the list of files changed in the PR for known malicious patterns (`.claude/`, `.vscode/`, `.github/workflows/`, executable scripts). Block auto-approve/auto-merge and apply `supply-chain/suspicious-files` label when found.
 - `diff-scope-validation`: Verify that the files changed in the PR are limited to what a legitimate dependency update would touch. Changes outside the expected scope (dependency manifests, lock files, vendored code) block auto-approve/auto-merge and apply `supply-chain/unexpected-scope` label.
+- `submodule-update-detection`: Detect when a dependency PR updates git submodules (`.gitmodules` + submodule pointer changes). Apply a `supply-chain/submodule-update` label (yellow) that blocks auto-approve/auto-merge — submodule updates bring in upstream codebases requiring engineer review, even when CI passes. Prevents false `supply-chain/unexpected-scope` labels on legitimate submodule updates.
 
 ### Modified Capabilities
 
@@ -30,5 +31,5 @@ With deptriage's auto-approve and auto-merge capabilities, a tampered Renovate/M
 
 - **Modified files:** `internal/classify/classify.go` (pipeline orchestration), `internal/classify/risk.go` (new risk hint types), `internal/github/pr.go` (new methods to fetch commit authors and changed files), `internal/types/types.go` (new constants)
 - **New files:** `internal/classify/supply_chain.go` (author validation, file detection, scope validation logic)
-- **External APIs:** GitHub Commits API (list commits on PR), GitHub Pull Request Files API (list changed files)
+- **External APIs:** GitHub Commits API (list commits on PR), GitHub Pull Request Files API (list changed files), GitHub Git Trees API (identify submodule entries)
 - **No new dependencies** — uses existing `google/go-github` client

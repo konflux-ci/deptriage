@@ -123,8 +123,36 @@ func Run(ctx context.Context, opts Options) (*types.ClassifyResult, error) {
 		if f := DetectSuspiciousFiles(prFiles, opts.SuspiciousPaths); f != nil {
 			supplyChainFindings = append(supplyChainFindings, f)
 		}
-		if f := ValidateDiffScope(pr.Author, prFiles, opts.TrustedBots, opts.ExpectedFiles); f != nil {
+
+		expectedFiles := opts.ExpectedFiles
+		var submoduleChanges []string
+		if isBotPR {
+			subPaths, err := client.FetchSubmodulePaths(ctx, pr.HeadRef)
+			if err != nil {
+				slog.Warn("failed to fetch submodule paths", "error", err)
+			} else {
+				for _, sp := range subPaths {
+					if slices.Contains(prFiles, sp) {
+						submoduleChanges = append(submoduleChanges, sp)
+					}
+				}
+				expectedFiles = append(append([]string{}, expectedFiles...), subPaths...)
+			}
+		}
+
+		if f := ValidateDiffScope(pr.Author, prFiles, opts.TrustedBots, expectedFiles); f != nil {
 			supplyChainFindings = append(supplyChainFindings, f)
+		}
+
+		if len(submoduleChanges) > 0 {
+			supplyChainFindings = append(supplyChainFindings, &SupplyChainFinding{
+				Key:       "SUPPLY_CHAIN_SUBMODULE_UPDATE",
+				Label:     types.LabelSupplyChainSubmoduleUpdate,
+				Color:     types.ColorYellow,
+				LabelDesc: "PR updates git submodules — requires engineer review",
+				Message:   "This dependency PR updates git submodules, which may bring in upstream changes that require human review",
+				Details:   submoduleChanges,
+			})
 		}
 	}
 
