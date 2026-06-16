@@ -60,10 +60,23 @@
 - [x] 10.1 Update README with supply-chain hardening section
 - [x] 10.2 Update README with action inputs table
 
-## 11. Integration Tests (follow-up)
+## 11. Submodule Update Detection
 
-- [ ] 11.1 Add integration test for classify pipeline with tampered PR (foreign commit author)
-- [ ] 11.2 Add integration test for classify pipeline with suspicious files (`.claude/settings.json`)
-- [ ] 11.3 Add integration test for classify pipeline with unexpected scope (Go source file in dependency PR)
-- [ ] 11.4 Add integration test for merge phase blocking on supply-chain labels
-- [x] 11.5 Add HTTP mock tests for `FetchPRCommits` and `FetchPRFiles` (pagination, errors, empty results, nil author)
+- [x] 11.1 Add `.gitmodules` to `defaultExpectedPatterns` in `internal/classify/supply_chain.go`
+- [x] 11.2 Add `LabelSupplyChainSubmoduleUpdate` constant to `internal/types/types.go`
+- [x] 11.3 Add `FetchSubmodulePaths` method to `internal/github/pr.go`: call Git Trees API, return paths with mode `160000`
+- [x] 11.4 Add submodule detection logic in `internal/classify/classify.go`: when `.gitmodules` is changed, fetch submodule paths, add to expected patterns, emit `SUPPLY_CHAIN_SUBMODULE_UPDATE` finding
+- [x] 11.5 Update `internal/analyze/template.md` with `SUPPLY_CHAIN_SUBMODULE_UPDATE` finding type
+- [x] 11.6 Add unit tests for `FetchSubmodulePaths` (success, no submodules, API error)
+- [x] 11.7 Add unit tests for `ValidateDiffScope` with `.gitmodules` and submodule patterns
+- [x] 11.8 Update README with submodule detection section
+- [x] 11.9 Create `openspec/changes/supply-chain-hardening/specs/submodule-update-detection/spec.md`
+- [x] 11.10 Update design.md, diff-scope-validation spec, proposal.md, and tasks.md
+
+## 12. Integration Tests (follow-up)
+
+- [ ] 12.1 Add integration test for classify pipeline with tampered PR (foreign commit author)
+- [ ] 12.2 Add integration test for classify pipeline with suspicious files (`.claude/settings.json`)
+- [ ] 12.3 Add integration test for classify pipeline with unexpected scope (Go source file in dependency PR)
+- [ ] 12.4 Add integration test for merge phase blocking on supply-chain labels
+- [x] 12.5 Add HTTP mock tests for `FetchPRCommits` and `FetchPRFiles` (pagination, errors, empty results, nil author)

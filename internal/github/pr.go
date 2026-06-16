@@ -357,6 +357,24 @@ func (c *Client) FetchPRFiles(ctx context.Context, prNumber int) ([]string, erro
 	return result, nil
 }
 
+// FetchSubmodulePaths returns the paths of git submodules in the repo tree at
+// the given ref by looking for tree entries with mode "160000" (gitlink).
+func (c *Client) FetchSubmodulePaths(ctx context.Context, ref string) ([]string, error) {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	tree, _, err := c.inner.Git.GetTree(ctx, c.owner, c.repo, ref, false)
+	if err != nil {
+		return nil, fmt.Errorf("fetching tree for %s: %w", ref, err)
+	}
+	var paths []string
+	for _, entry := range tree.Entries {
+		if entry.GetMode() == "160000" {
+			paths = append(paths, entry.GetPath())
+		}
+	}
+	return paths, nil
+}
+
 // HasLabels returns true if the PR has all the specified labels.
 func (c *Client) HasLabels(ctx context.Context, prNumber int, labels []string) (bool, error) {
 	pr, err := c.FetchPR(ctx, prNumber)

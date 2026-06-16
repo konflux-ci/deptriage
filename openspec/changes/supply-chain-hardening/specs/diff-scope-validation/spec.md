@@ -13,6 +13,7 @@ Default expected file patterns:
 - `requirements.txt`, `poetry.lock`, `Pipfile.lock` — Python manifests
 - `Gemfile`, `Gemfile.lock` — Ruby manifests
 - `Cargo.toml`, `Cargo.lock` — Rust manifests
+- `.gitmodules` — git submodule configuration
 
 #### Scenario: PR changes only go.mod and go.sum
 - **WHEN** the PR changes only `go.mod` and `go.sum`
@@ -49,6 +50,18 @@ Default expected file patterns:
 - **WHEN** the PR is opened by a human (not a trusted bot)
 - **THEN** the system SHALL skip diff scope validation entirely
 - **RATIONALE:** Scope validation is specific to automated dependency PRs. Human PRs are expected to touch any files.
+
+#### Scenario: PR changes .gitmodules only
+- **WHEN** the PR changes only `.gitmodules`
+- **THEN** the system SHALL NOT apply the `supply-chain/unexpected-scope` label
+- **RATIONALE:** `.gitmodules` is a dependency manifest for git submodules and is in the default expected patterns.
+
+#### Scenario: PR changes .gitmodules and a submodule pointer
+- **WHEN** the PR changes `.gitmodules` and a submodule pointer file (e.g., `oauth2-proxy`)
+- **AND** the submodule pointer is identified via the Git Trees API (mode `160000`)
+- **THEN** the system SHALL NOT apply the `supply-chain/unexpected-scope` label for the submodule pointer
+- **AND** the system SHALL apply the `supply-chain/submodule-update` label instead
+- **RATIONALE:** Submodule pointer changes are expected companions to `.gitmodules` changes but still require human review.
 
 #### Scenario: API error prevents file listing
 - **WHEN** the system cannot fetch the PR's changed files

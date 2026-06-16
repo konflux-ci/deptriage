@@ -237,6 +237,80 @@ func TestFetchPRFiles_Empty(t *testing.T) {
 	}
 }
 
+// --- FetchSubmodulePaths tests ---
+
+func TestFetchSubmodulePaths(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /repos/testorg/testrepo/git/trees/main", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprint(w, `{
+			"sha": "abc123",
+			"tree": [
+				{"path": "go.mod", "mode": "100644", "type": "blob", "sha": "aaa"},
+				{"path": "go.sum", "mode": "100644", "type": "blob", "sha": "bbb"},
+				{"path": "internal", "mode": "040000", "type": "tree", "sha": "ccc"},
+				{"path": "oauth2-proxy", "mode": "160000", "type": "commit", "sha": "ddd"},
+				{"path": "another-submodule", "mode": "160000", "type": "commit", "sha": "eee"}
+			]
+		}`)
+	})
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	client := newTestClient(t, server)
+	paths, err := client.FetchSubmodulePaths(context.Background(), "main")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(paths) != 2 {
+		t.Fatalf("got %d submodule paths, want 2: %v", len(paths), paths)
+	}
+	if paths[0] != "oauth2-proxy" || paths[1] != "another-submodule" {
+		t.Errorf("got paths %v, want [oauth2-proxy another-submodule]", paths)
+	}
+}
+
+func TestFetchSubmodulePaths_NoSubmodules(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /repos/testorg/testrepo/git/trees/main", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprint(w, `{
+			"sha": "abc123",
+			"tree": [
+				{"path": "go.mod", "mode": "100644", "type": "blob", "sha": "aaa"},
+				{"path": "internal", "mode": "040000", "type": "tree", "sha": "bbb"}
+			]
+		}`)
+	})
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	client := newTestClient(t, server)
+	paths, err := client.FetchSubmodulePaths(context.Background(), "main")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(paths) != 0 {
+		t.Fatalf("got %d submodule paths, want 0", len(paths))
+	}
+}
+
+func TestFetchSubmodulePaths_APIError(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /repos/testorg/testrepo/git/trees/main", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = fmt.Fprint(w, `{"message": "Not Found"}`)
+	})
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	client := newTestClient(t, server)
+	_, err := client.FetchSubmodulePaths(context.Background(), "main")
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+}
+
 func TestFetchPRFiles_ManyFiles(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /repos/testorg/testrepo/pulls/1/files", func(w http.ResponseWriter, r *http.Request) {

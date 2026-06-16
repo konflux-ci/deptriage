@@ -22,13 +22,14 @@ The current classify pipeline checks semver bump type, risk hints (Go toolchain,
 
 ## Decisions
 
-### 1. Three-layer validation: author, files, scope
+### 1. Four-layer validation: author, files, scope, submodules
 
-The supply-chain checks are split into three independent validators that each produce a risk hint:
+The supply-chain checks are split into four independent validators that each produce a risk hint:
 
 1. **Author validation** — Is the PR from a known bot, and did that same bot author all commits?
 2. **Suspicious file detection** — Does the PR contain files on a blocklist?
 3. **Diff scope validation** — Does the PR only touch files expected for a dependency update?
+4. **Submodule update detection** — Does the PR update git submodules (requiring engineer review)?
 
 Each validator runs independently and produces its own risk hint and label. This keeps the logic testable, composable, and easy to extend. A PR can fail multiple validators.
 
@@ -91,7 +92,40 @@ Note: `.github/workflows/` appears in both the suspicious-files blocklist (Decis
 - Only check file count — a single malicious file in a 50-file dependency update is the exact attack vector
 - Use a heuristic ("if >5 non-manifest files, flag") — arbitrary threshold, easy to game
 
-### 5. Integration point: classify pipeline, before auto-approve
+### 5. Submodule update detection
+
+Repositories that track upstream projects as git submodules (e.g., `konflux-ci/oauth2-proxy`) produce legitimate dependency PRs that change `.gitmodules` and a submodule pointer file. Without special handling, these trigger `supply-chain/unexpected-scope` — a false positive with alarming "tampering" language.
+
+However, submodule updates bring in entire upstream codebases. Passing CI alone does not guarantee there are no incompatible or dangerous changes. These PRs must still require human review.
+
+**Solution: detect and re-classify, don't suppress.**
+
+For every bot PR:
+1. Fetch the repository tree at the PR's head ref via the Git Trees API (`GET /repos/{owner}/{repo}/git/trees/{ref}`)
+2. Identify entries with mode `160000` (gitlink) — these are submodule paths
+3. Add those paths to the expected-files allowlist so `ValidateDiffScope` does not flag them as `unexpected-scope`
+4. If any changed files match submodule paths, emit a `SUPPLY_CHAIN_SUBMODULE_UPDATE` finding — this blocks auto-approve/auto-merge with accurate messaging
+
+The tree fetch runs for all bot PRs, not only when `.gitmodules` is in the diff, because submodule pointer bumps (the common case) only change the gitlink commit SHA without modifying `.gitmodules`.
+
+`.gitmodules` itself is added to `defaultExpectedPatterns` since it is a standard dependency manifest (analogous to `go.mod`).
+
+The new `supply-chain/submodule-update` label uses **yellow** color (`fbca04`) instead of red — it is a caution requiring human review, not an attack indicator. It still blocks all merge paths via the existing `supply-chain/` prefix check.
+
+**Fail-open on Trees API errors:** If the tree fetch fails, submodule detection is skipped and diff scope validation proceeds normally. The worst case is the pre-existing false `unexpected-scope` label. This is acceptable because the scope validator itself remains fail-closed.
+
+**Known limitations:**
+- **Nested submodules are not detected.** The tree fetch uses `recursive=false`, so only top-level gitlinks are discovered. Nested submodules (a submodule inside a submodule) would be missed and flagged as `unexpected-scope`. This is acceptable because Konflux repos do not use nested submodules, and switching to `recursive=true` introduces truncation risk on large repositories.
+- **Submodule removals/renames are not detected.** Only the PR head tree is inspected, so a submodule path that was removed or renamed by the PR would not be found. This is acceptable because Renovate/MintMaker only bumps submodule versions — it does not remove or rename submodules. A bot PR that removes a submodule would be unusual enough to warrant the `unexpected-scope` flag.
+
+**Alternatives considered:**
+- Only add `.gitmodules` to defaults and let users configure submodule paths via `--expected-file` per repo — requires per-repo configuration for a common pattern
+- Suppress the finding entirely and allow auto-merge — unsafe; submodule updates can introduce breaking or malicious upstream changes that CI won't catch
+- Parse `.gitmodules` file content to find submodule paths — more complex, requires an additional API call to fetch file contents; the Trees API is simpler and more reliable
+- Fetch the tree recursively (`recursive=true`) to discover nested gitlinks — adds truncation handling complexity for a scenario that doesn't occur in Konflux repos
+- Union base+head trees to catch submodule removals/renames — adds a second API call for a scenario that doesn't occur with dependency bot PRs
+
+### 6. Integration point: classify pipeline, before auto-approve
 
 The supply-chain checks run in `classify.Run()` after PR fetch, semver detection, and package extraction, but BEFORE auto-approve label application. This means:
 
@@ -105,7 +139,7 @@ Supply-chain risk hints use the same mechanism as existing risk hints (Go toolch
 
 This is implemented by checking for the `supply-chain/` label prefix in the merge subcommand's deferred-approval logic and excluding those PRs.
 
-### 6. Supply-chain labels block ALL merge paths
+### 7. Supply-chain labels block ALL merge paths
 
 Supply-chain concerns must block merge through every code path, not just deferred approval:
 
@@ -121,7 +155,7 @@ Supply-chain concerns must block merge through every code path, not just deferre
 - Only block in classify — insufficient. The analyze phase has its own APPROVE and merge logic that operates independently.
 - Rely solely on labels for merge gating — insufficient. If label application fails and `approved`/`lgtm` remain, the merge phase sees no supply-chain signal. Removing the approval labels closes this gap.
 
-### 7. Supply-chain findings in ClassifyResult and LLM context
+### 8. Supply-chain findings in ClassifyResult and LLM context
 
 Supply-chain findings are serialized as `SupplyChainFindingResult` structs in `ClassifyResult.SupplyChainFindings`. This serves three purposes:
 
@@ -131,17 +165,18 @@ Supply-chain findings are serialized as `SupplyChainFindingResult` structs in `C
 
 Each finding includes a `Key` (e.g., `SUPPLY_CHAIN_AUTHOR_MISMATCH`), `Label`, `Message`, and `Details` (specific commit SHAs or file paths). Fail-closed errors use a distinct key `SUPPLY_CHAIN_VERIFICATION_FAILED` to distinguish "could not verify" from "verified and found mismatch" in ops triage.
 
-### 8. New label namespace: `supply-chain/*`
+### 9. New label namespace: `supply-chain/*`
 
-Three new labels, all with red color (`e11d48`) to signal severity:
+Four labels in the `supply-chain/` namespace:
 
-- `supply-chain/author-mismatch` — PR commit author doesn't match the bot that opened the PR
-- `supply-chain/suspicious-files` — PR contains changes to known attack vector paths
-- `supply-chain/unexpected-scope` — PR contains changes outside expected dependency update scope
+- `supply-chain/author-mismatch` — PR commit author doesn't match the bot that opened the PR (red `e11d48`)
+- `supply-chain/suspicious-files` — PR contains changes to known attack vector paths (red `e11d48`)
+- `supply-chain/unexpected-scope` — PR contains changes outside expected dependency update scope (red `e11d48`)
+- `supply-chain/submodule-update` — PR updates git submodules requiring engineer review (yellow `fbca04`)
 
-Red color distinguishes these from yellow `risk-hint/*` labels — supply-chain concerns are more severe than build compatibility concerns.
+Red color distinguishes attack indicators from yellow `risk-hint/*` labels. The `submodule-update` label uses yellow because it is a caution (legitimate pattern requiring review), not an attack indicator. All four labels block auto-approve and auto-merge via the `supply-chain/` prefix check.
 
-### 9. Project layout for new code
+### 10. Project layout for new code
 
 ```
 internal/
@@ -156,12 +191,12 @@ internal/
 │   ├── merge.go               # Modified: block supply-chain/* in both eligibility checks
 │   └── merge_test.go          # Modified: supply-chain label tests
 ├── github/
-│   └── pr.go                  # Modified: add FetchPRCommits, FetchPRFiles methods
+│   └── pr.go                  # Modified: add FetchPRCommits, FetchPRFiles, FetchSubmodulePaths methods
 └── types/
     └── types.go               # Modified: SupplyChainFindingResult, ClassifyResult, ContextJSON
 ```
 
-### 10. Configuration via CLI flags
+### 11. Configuration via CLI flags
 
 New flags on the `classify` and `both` subcommands:
 

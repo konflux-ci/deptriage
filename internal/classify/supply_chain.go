@@ -81,6 +81,7 @@ var defaultExpectedPatterns = []string{
 	"Gemfile.lock",
 	"Cargo.toml",
 	"Cargo.lock",
+	".gitmodules",
 }
 
 // IsTrustedBot reports whether the given login is in the trusted bot list.

@@ -343,6 +343,25 @@ func TestValidateDiffScope(t *testing.T) {
 			extraPatterns: []string{"charts/*.yaml"},
 			wantCount:     1,
 		},
+		{
+			name:     "gitmodules change is expected by default",
+			prAuthor: "renovate[bot]",
+			files:    []string{".gitmodules"},
+			wantNil:  true,
+		},
+		{
+			name:      "submodule pointer without extra pattern is unexpected",
+			prAuthor:  "renovate[bot]",
+			files:     []string{".gitmodules", "oauth2-proxy"},
+			wantCount: 1,
+		},
+		{
+			name:          "submodule pointer with extra pattern is expected",
+			prAuthor:      "renovate[bot]",
+			files:         []string{".gitmodules", "oauth2-proxy"},
+			extraPatterns: []string{"oauth2-proxy"},
+			wantNil:       true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
