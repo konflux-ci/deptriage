@@ -60,7 +60,7 @@ Default blocklist:
 - `.github/workflows/` — CI/CD tampering
 - `.github/actions/` — CI/CD tampering
 
-Any match triggers the `supply-chain/suspicious-files` risk hint. The blocklist is configurable via a `--suspicious-path` flag (repeatable) that adds to the defaults.
+Any match triggers the `supply-chain/suspicious-files` risk hint, **except** when the PR is a pure GitHub Actions update (all changed files are under `.github/workflows/` or `.github/actions/`) from a trusted bot — in that case, the workflow/action files are filtered out before the check runs. The blocklist is configurable via a `--suspicious-path` flag (repeatable) that adds to the defaults.
 
 The check also flags executable scripts (`.sh`, `.mjs`, `.js`, `.py`, `.rb`) found outside vendored directories (`vendor/`, `third_party/`, `node_modules/`). Dependency updates should not introduce new executable scripts.
 
@@ -81,11 +81,11 @@ Default expected patterns:
 - `renovate.json`, `.renovaterc*` — Renovate config (Renovate sometimes updates its own config)
 - `package.json`, `package-lock.json`, `yarn.lock` — Node.js manifests (if applicable)
 - `requirements.txt`, `poetry.lock`, `Pipfile.lock` — Python manifests (if applicable)
-- `.github/workflows/` — **only when the PR is from a trusted bot AND the only workflow changes are version/digest bumps in `uses:` lines** (handled by a targeted check, not the broad blocklist from Decision 3)
+- `.github/workflows/`, `.github/actions/` — added dynamically to expected patterns when the PR is a pure GitHub Actions update (all changed files are under these prefixes) from a trusted bot
 
 Files outside this allowlist trigger `supply-chain/unexpected-scope`. The allowlist is configurable via a `--expected-file` flag (repeatable) that adds to the defaults.
 
-Note: `.github/workflows/` appears in both the suspicious-files blocklist (Decision 3) and the expected-files allowlist (this decision). The blocklist fires unconditionally as a warning signal. The scope validator provides a more nuanced check: workflow files are "expected" only if the changes are limited to version/digest bumps in `uses:` directives. This dual approach means workflow changes are always flagged (suspicious-files label) while also being evaluated in context (scope validation may or may not flag depending on the nature of the change).
+Note: `.github/workflows/` and `.github/actions/` appear in both the suspicious-files blocklist (Decision 3) and this expected-files mechanism. For pure GitHub Actions update PRs (where all changed files are under these prefixes), both checks are bypassed: workflow/action files are filtered out before suspicious-file detection, and the prefixes are added to the expected-files allowlist for scope validation. For mixed PRs (e.g., a go.mod update that also touches workflows), both checks fire normally — the workflow files remain suspicious and outside expected scope.
 
 **Alternatives considered:**
 - Block all non-manifest files — same as above
@@ -212,7 +212,7 @@ No flag is needed to enable/disable the supply-chain checks — they always run.
 
 **[False positives on bot identity]** → Some organizations run custom Renovate instances with non-standard bot names. Mitigation: `--trusted-bot` flag allows adding custom bot logins. Default list covers the standard Konflux bots.
 
-**[Legitimate workflow changes in dependency PRs]** → Renovate sometimes updates GitHub Actions workflow files (e.g., bumping action versions). These will trigger `supply-chain/suspicious-files`. Mitigation: this is the correct behavior — workflow changes in dependency PRs should be reviewed by a human, even when legitimate. The PR is not blocked from merging; it just loses auto-merge eligibility.
+**[Legitimate workflow changes in dependency PRs]** → Renovate sometimes updates GitHub Actions workflow files (e.g., bumping action versions). Pure GitHub Actions updates (where all changed files are under `.github/workflows/` or `.github/actions/`) from trusted bots are now excluded from both suspicious-file detection and unexpected-scope validation, since they are legitimate dependency updates analogous to Go module or npm package bumps. Mixed PRs (e.g., a go.mod update that also touches workflows) still trigger both checks.
 
 **[Performance impact]** → Two additional API calls per PR (commits list, files list). Mitigation: both are lightweight paginated calls; dependency PRs typically have 1-3 commits and 2-10 changed files. Total additional latency: ~200ms.
 

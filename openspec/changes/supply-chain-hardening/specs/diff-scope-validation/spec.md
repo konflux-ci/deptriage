@@ -46,6 +46,12 @@ Default expected file patterns:
 - **THEN** the system SHALL add `Chart.yaml` to the expected file list alongside the defaults
 - **AND** a PR changing only `Chart.yaml` SHALL NOT trigger the scope validation label
 
+#### Scenario: PR changes only GitHub Actions workflow files
+- **WHEN** all changed files in the PR are under `.github/workflows/` and/or `.github/actions/`
+- **AND** the PR is opened by a trusted bot
+- **THEN** the system SHALL NOT apply the `supply-chain/unexpected-scope` label
+- **RATIONALE:** GitHub Actions are legitimate dependencies managed by renovate/dependabot. Workflow and action files are the expected manifests for these updates.
+
 #### Scenario: Non-bot PR skips scope validation
 - **WHEN** the PR is opened by a human (not a trusted bot)
 - **THEN** the system SHALL skip diff scope validation entirely
