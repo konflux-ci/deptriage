@@ -201,8 +201,10 @@ Inspects the list of changed files for known attack vectors:
 - Executable scripts (`.sh`, `.mjs`, `.js`, `.py`, `.rb`, `.pl`) outside
   vendored directories
 
-Matches trigger the `supply-chain/suspicious-files` label. Add custom path
-prefixes via the `suspicious-paths` input.
+Matches trigger the `supply-chain/suspicious-files` label, **except** for pure
+GitHub Actions update PRs (where all changed files are under `.github/workflows/`
+or `.github/actions/`) from a trusted bot — these are recognized as legitimate
+dependency updates. Add custom path prefixes via the `suspicious-paths` input.
 
 ### Diff scope validation
 
@@ -212,8 +214,10 @@ Changes outside the expected scope trigger `supply-chain/unexpected-scope`.
 
 Default expected patterns include `go.mod`, `go.sum`, `Dockerfile`,
 `Containerfile`, `vendor/`, `.tekton/`, `.gitmodules`, `renovate.json`, and
-common package manager manifests. Add custom patterns via the `expected-files`
-input.
+common package manager manifests. For pure GitHub Actions update PRs (where all
+changed files are under `.github/workflows/` or `.github/actions/`), those
+prefixes are automatically added to the expected patterns. Add custom patterns
+via the `expected-files` input.
 
 ### Submodule update detection
 

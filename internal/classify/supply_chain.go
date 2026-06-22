@@ -53,6 +53,11 @@ var suspiciousScriptExts = []string{
 	".sh", ".mjs", ".js", ".py", ".rb", ".pl",
 }
 
+var gitHubActionPrefixes = []string{
+	".github/workflows/",
+	".github/actions/",
+}
+
 var vendoredPrefixes = []string{
 	"vendor/",
 	"third_party/",
@@ -173,6 +178,31 @@ func ValidateDiffScope(prAuthor string, files []string, extraBots []string, extr
 		Message:   "This dependency PR modifies files outside the expected scope for a dependency update",
 		Details:   unexpected,
 	}
+}
+
+// IsGitHubActionsUpdate reports whether the PR is a pure GitHub Actions
+// dependency update — all changed files are under .github/workflows/ or
+// .github/actions/. Returns false for an empty file list.
+func IsGitHubActionsUpdate(files []string) bool {
+	if len(files) == 0 {
+		return false
+	}
+	for _, f := range files {
+		if !matchesAnyPrefix(f, gitHubActionPrefixes) {
+			return false
+		}
+	}
+	return true
+}
+
+func filterGitHubActionPaths(files []string) []string {
+	var out []string
+	for _, f := range files {
+		if !matchesAnyPrefix(f, gitHubActionPrefixes) {
+			out = append(out, f)
+		}
+	}
+	return out
 }
 
 func matchesAnyPrefix(path string, prefixes []string) bool {

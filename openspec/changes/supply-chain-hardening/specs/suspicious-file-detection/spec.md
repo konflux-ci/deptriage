@@ -20,10 +20,15 @@ Default suspicious path prefixes:
 - **WHEN** the PR changes a file at `.vscode/settings.json`
 - **THEN** the system SHALL apply the `supply-chain/suspicious-files` label
 
-#### Scenario: PR modifies GitHub Actions workflows
-- **WHEN** the PR changes a file at `.github/workflows/ci.yml`
+#### Scenario: Pure GitHub Actions update PR
+- **WHEN** a trusted bot PR changes only files under `.github/workflows/` and/or `.github/actions/` (i.e. a pure GitHub Actions dependency update)
+- **THEN** the system SHALL NOT apply the `supply-chain/suspicious-files` label
+- **RATIONALE:** GitHub Actions are legitimate dependencies managed by renovate/dependabot. When they are updated, workflow YAML files are the expected "manifests" — analogous to `go.mod` for Go modules.
+
+#### Scenario: PR modifies GitHub Actions workflows alongside other files
+- **WHEN** the PR changes a file at `.github/workflows/ci.yml` AND also changes files outside `.github/workflows/` and `.github/actions/` (e.g. `go.mod`, `internal/foo.go`)
 - **THEN** the system SHALL apply the `supply-chain/suspicious-files` label
-- **RATIONALE:** Workflow modifications in dependency PRs are unexpected and should require human review, even when the change is a legitimate action version bump.
+- **RATIONALE:** Workflow modifications in dependency PRs that also touch other files are unexpected and should require human review.
 
 #### Scenario: PR with only dependency manifest changes
 - **WHEN** the PR changes only `go.mod` and `go.sum`

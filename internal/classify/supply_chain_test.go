@@ -144,6 +144,30 @@ func TestValidateAuthor(t *testing.T) {
 	}
 }
 
+func TestIsGitHubActionsUpdate(t *testing.T) {
+	tests := []struct {
+		name  string
+		files []string
+		want  bool
+	}{
+		{"empty file list", nil, false},
+		{"single workflow file", []string{".github/workflows/ci.yml"}, true},
+		{"multiple workflow files", []string{".github/workflows/ci.yml", ".github/workflows/release.yaml"}, true},
+		{"single action file", []string{".github/actions/my-action/action.yml"}, true},
+		{"mixed workflow and action files", []string{".github/workflows/ci.yml", ".github/actions/build/action.yml"}, true},
+		{"workflow plus go.mod", []string{".github/workflows/ci.yml", "go.mod"}, false},
+		{"only go.mod", []string{"go.mod", "go.sum"}, false},
+		{"workflow plus source file", []string{".github/workflows/ci.yml", "internal/foo.go"}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := IsGitHubActionsUpdate(tt.files); got != tt.want {
+				t.Errorf("IsGitHubActionsUpdate(%v) = %v, want %v", tt.files, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestDetectSuspiciousFiles(t *testing.T) {
 	tests := []struct {
 		name       string

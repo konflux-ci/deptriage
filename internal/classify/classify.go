@@ -120,11 +120,23 @@ func Run(ctx context.Context, opts Options) (*types.ClassifyResult, error) {
 			})
 		}
 	} else {
-		if f := DetectSuspiciousFiles(prFiles, opts.SuspiciousPaths); f != nil {
+		isActionsUpdate := isBotPR && IsGitHubActionsUpdate(prFiles)
+		if isActionsUpdate {
+			slog.Info("detected pure GitHub Actions update, excluding workflow/action paths from supply-chain checks")
+		}
+
+		suspiciousFiles := prFiles
+		if isActionsUpdate {
+			suspiciousFiles = filterGitHubActionPaths(prFiles)
+		}
+		if f := DetectSuspiciousFiles(suspiciousFiles, opts.SuspiciousPaths); f != nil {
 			supplyChainFindings = append(supplyChainFindings, f)
 		}
 
 		expectedFiles := opts.ExpectedFiles
+		if isActionsUpdate {
+			expectedFiles = append(append([]string{}, expectedFiles...), gitHubActionPrefixes...)
+		}
 		var submoduleChanges []string
 		if isBotPR {
 			subPaths, err := client.FetchSubmodulePaths(ctx, pr.HeadRef)
