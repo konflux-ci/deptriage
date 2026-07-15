@@ -14,7 +14,7 @@ USER root
 ENV GOPATH=/tmp/go
 RUN go install golang.org/x/vuln/cmd/govulncheck@latest
 
-FROM registry.access.redhat.com/ubi10/ubi-minimal:10.2-1782798957
+FROM registry.access.redhat.com/ubi10/ubi-minimal:10.2-1784094212
 
 COPY --from=builder /deptriage /usr/local/bin/deptriage
 COPY --from=tools /tmp/go/bin/govulncheck /usr/local/bin/govulncheck
