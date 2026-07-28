@@ -1,4 +1,4 @@
-FROM registry.access.redhat.com/ubi10/go-toolset:10.2-1785140569 AS builder
+FROM registry.access.redhat.com/ubi10/go-toolset:10.2-1785197847 AS builder
 
 USER root
 WORKDIR /src
@@ -8,7 +8,7 @@ RUN go mod download
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /deptriage ./cmd/deptriage/
 
-FROM registry.access.redhat.com/ubi10/go-toolset:10.2-1785140569 AS tools
+FROM registry.access.redhat.com/ubi10/go-toolset:10.2-1785197847 AS tools
 
 USER root
 ENV GOPATH=/tmp/go
