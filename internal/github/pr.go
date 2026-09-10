@@ -36,14 +36,18 @@ var ErrMergeQueueRequired = errors.New("merge queue required")
 
 // PRData holds the metadata fetched from a pull request.
 type PRData struct {
-	Number  int
-	NodeID  string
-	Title   string
-	Body    string
-	Author  string
-	BaseRef string
-	HeadRef string
-	Labels  []string
+	Number    int
+	NodeID    string
+	Title     string
+	Body      string
+	Author    string
+	BaseRef   string
+	BaseSHA   string
+	HeadRef   string
+	HeadSHA   string
+	HeadOwner string
+	HeadRepo  string
+	Labels    []string
 }
 
 // FetchPR retrieves pull request metadata.
@@ -58,16 +62,70 @@ func (c *Client) FetchPR(ctx context.Context, number int) (*PRData, error) {
 		labels = append(labels, l.GetName())
 	}
 
+	head := pr.GetHead()
+	headRepo := head.GetRepo()
 	return &PRData{
-		Number:  number,
-		NodeID:  pr.GetNodeID(),
-		Title:   pr.GetTitle(),
-		Body:    pr.GetBody(),
-		Author:  pr.GetUser().GetLogin(),
-		BaseRef: pr.GetBase().GetRef(),
-		HeadRef: pr.GetHead().GetRef(),
-		Labels:  labels,
+		Number:    number,
+		NodeID:    pr.GetNodeID(),
+		Title:     pr.GetTitle(),
+		Body:      pr.GetBody(),
+		Author:    pr.GetUser().GetLogin(),
+		BaseRef:   pr.GetBase().GetRef(),
+		BaseSHA:   pr.GetBase().GetSHA(),
+		HeadRef:   head.GetRef(),
+		HeadSHA:   head.GetSHA(),
+		HeadOwner: headRepo.GetOwner().GetLogin(),
+		HeadRepo:  headRepo.GetName(),
+		Labels:    labels,
 	}, nil
+}
+
+// FetchPRSnapshot returns commit provenance and changed paths for the exact
+// base-to-head commit range captured in pr. Unlike pull-request endpoints,
+// the compare endpoint is addressed by immutable commit SHAs.
+func (c *Client) FetchPRSnapshot(ctx context.Context, pr *PRData) ([]CommitInfo, []string, error) {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	if pr == nil || pr.BaseSHA == "" || pr.HeadSHA == "" || pr.HeadOwner == "" || pr.HeadRepo == "" {
+		return nil, nil, fmt.Errorf("fetching PR snapshot: base SHA, head SHA, and head repository are required")
+	}
+
+	opts := &gh.ListOptions{PerPage: 100}
+	var commits []CommitInfo
+	var files []string
+	for {
+		comparison, response, err := c.inner.Repositories.CompareCommits(ctx, pr.HeadOwner, pr.HeadRepo, pr.BaseSHA, pr.HeadSHA, opts)
+		if err != nil {
+			return nil, nil, fmt.Errorf("comparing %s to %s in %s/%s: %w", pr.BaseSHA, pr.HeadSHA, pr.HeadOwner, pr.HeadRepo, err)
+		}
+		for _, commit := range comparison.Commits {
+			author := ""
+			if commit.GetAuthor() != nil {
+				author = commit.GetAuthor().GetLogin()
+			}
+			commits = append(commits, CommitInfo{SHA: commit.GetSHA(), Author: author})
+		}
+		// GitHub includes files only on the first comparison page.
+		if opts.Page == 0 || opts.Page == 1 {
+			for _, file := range comparison.Files {
+				files = append(files, file.GetFilename())
+			}
+		}
+		if response.NextPage == 0 {
+			if comparison.GetTotalCommits() != len(commits) {
+				return nil, nil, fmt.Errorf("comparing %s to %s: received %d of %d commits", pr.BaseSHA, pr.HeadSHA, len(commits), comparison.GetTotalCommits())
+			}
+			break
+		}
+		opts.Page = response.NextPage
+	}
+	// The compare API returns at most 300 files and does not indicate whether
+	// there are more. Fail closed at that boundary rather than approving a
+	// range whose full file scope cannot be verified.
+	if len(files) >= 300 {
+		return nil, nil, fmt.Errorf("comparing %s to %s: changed-file list may be truncated", pr.BaseSHA, pr.HeadSHA)
+	}
+	return commits, files, nil
 }
 
 // EnsureLabel creates the label if it doesn't exist, then applies it to the PR.
@@ -145,8 +203,15 @@ func (c *Client) FindOpenPRsForSHA(ctx context.Context, sha string) ([]int, erro
 // MergePR merges a pull request using the specified method (merge, squash, rebase).
 // Returns ErrMergeQueueRequired if the repository requires PRs to go through a merge queue.
 func (c *Client) MergePR(ctx context.Context, prNumber int, method string) error {
+	return c.MergePRAtSHA(ctx, prNumber, method, "")
+}
+
+// MergePRAtSHA merges a pull request only if its head still matches sha. An
+// empty sha preserves the GitHub API's default merge behavior.
+func (c *Client) MergePRAtSHA(ctx context.Context, prNumber int, method, sha string) error {
 	_, _, err := c.inner.PullRequests.Merge(ctx, c.owner, c.repo, prNumber, "", &gh.PullRequestOptions{
 		MergeMethod: method,
+		SHA:         sha,
 	})
 	if err != nil {
 		if isMergeQueueError(err) {
@@ -237,7 +302,13 @@ func (c *Client) ChecksAllPassed(ctx context.Context, prNumber int, excludeWorkf
 	if err != nil {
 		return ChecksFailed, fmt.Errorf("fetching PR #%d for check status: %w", prNumber, err)
 	}
-	ref := pr.GetHead().GetSHA()
+	return c.ChecksAllPassedForSHA(ctx, pr.GetHead().GetSHA(), excludeWorkflow)
+}
+
+// ChecksAllPassedForSHA evaluates CI checks for an explicit commit SHA. Callers
+// handling events should use this method to avoid changing the checked commit
+// between event processing and merge.
+func (c *Client) ChecksAllPassedForSHA(ctx context.Context, ref, excludeWorkflow string) (CheckStatus, error) {
 
 	hasInProgress := false
 
@@ -360,11 +431,23 @@ func (c *Client) FetchPRFiles(ctx context.Context, prNumber int) ([]string, erro
 // FetchSubmodulePaths returns the paths of git submodules in the repo tree at
 // the given ref by looking for tree entries with mode "160000" (gitlink).
 func (c *Client) FetchSubmodulePaths(ctx context.Context, ref string) ([]string, error) {
+	return c.FetchSubmodulePathsForRepo(ctx, c.owner, c.repo, ref)
+}
+
+// FetchSubmodulePathsForRepo returns every submodule path in the repository
+// tree at ref. The recursive tree query is required to detect nested gitlinks.
+func (c *Client) FetchSubmodulePathsForRepo(ctx context.Context, owner, repo, ref string) ([]string, error) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	tree, _, err := c.inner.Git.GetTree(ctx, c.owner, c.repo, ref, false)
+	if owner == "" || repo == "" || ref == "" {
+		return nil, fmt.Errorf("fetching tree: owner, repository, and ref are required")
+	}
+	tree, _, err := c.inner.Git.GetTree(ctx, owner, repo, ref, true)
 	if err != nil {
-		return nil, fmt.Errorf("fetching tree for %s: %w", ref, err)
+		return nil, fmt.Errorf("fetching tree for %s/%s at %s: %w", owner, repo, ref, err)
+	}
+	if tree.GetTruncated() {
+		return nil, fmt.Errorf("fetching tree for %s/%s at %s: recursive tree response truncated", owner, repo, ref)
 	}
 	var paths []string
 	for _, entry := range tree.Entries {
