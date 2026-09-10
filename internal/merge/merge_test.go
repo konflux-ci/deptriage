@@ -18,6 +18,26 @@ package merge
 
 import "testing"
 
+func TestIsTrustedMergeAuthor(t *testing.T) {
+	tests := []struct {
+		name   string
+		author string
+		extra  []string
+		want   bool
+	}{
+		{name: "default trusted bot", author: "renovate[bot]", want: true},
+		{name: "configured trusted bot", author: "custom-bot[bot]", extra: []string{"custom-bot[bot]"}, want: true},
+		{name: "human author is rejected", author: "alice", want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := isTrustedMergeAuthor(tt.author, tt.extra); got != tt.want {
+				t.Errorf("isTrustedMergeAuthor(%q, %v) = %v, want %v", tt.author, tt.extra, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestIsMergeEligible(t *testing.T) {
 	tests := []struct {
 		name   string

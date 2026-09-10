@@ -60,8 +60,8 @@ Deferred approval eligibility requires ALL of the following:
 
 #### Scenario: Go-toolset patch bump with passing CI
 - **WHEN** a PR has labels `semver/patch` and `risk-hint/go-toolchain`, no `risk/high` label, and all CI checks pass
-- **THEN** the system SHALL apply `approved` and `lgtm` labels and merge the PR
-- **RATIONALE:** Go-toolset patch bumps (same minor version, different build ID) trigger risk hints because they could theoretically change the Go version. However, when the Konflux CI pipeline passes, the build is proven safe. The risk hint prevented premature approval before CI ran; once CI confirms safety, the merge can proceed.
+- **THEN** the system SHALL submit a SHA-bound approval review and merge the PR
+- **RATIONALE:** Go-toolset patch bumps (same minor version, different build ID) trigger risk hints because they could theoretically change the Go version. However, when the Konflux CI pipeline passes, the build is proven safe. The risk hint prevented premature approval before CI ran; once CI confirms safety, the merge can proceed without adding persistent approval labels.
 
 #### Scenario: Patch with risk hints but CI failing
 - **WHEN** a PR has labels `semver/patch` and `risk-hint/go-toolchain`, but CI checks are failing
@@ -70,7 +70,7 @@ Deferred approval eligibility requires ALL of the following:
 
 #### Scenario: Minor bump with risk hints eligible for deferred approval
 - **WHEN** a PR has labels `semver/minor` and `risk-hint/go-toolchain`, no `risk/high` label, and all CI checks pass
-- **THEN** the system SHALL apply `approved` and `lgtm` labels and merge the PR
+- **THEN** the system SHALL submit a SHA-bound approval review and merge the PR
 - **RATIONALE:** Minor bumps with risk hints benefit from the same deferred approval as patches. When the Konflux CI pipeline passes, the build is proven safe regardless of bump type.
 
 #### Scenario: Patch without risk hints uses normal auto-approve path
@@ -149,6 +149,23 @@ The deptriage binary SHALL provide a `merge` subcommand that can be invoked inde
 #### Scenario: Merge subcommand with head SHA
 - **WHEN** `deptriage merge --head-sha <sha>` is invoked
 - **THEN** the system SHALL find all open PRs matching that head SHA and evaluate each for merge eligibility
+
+### Requirement: Deferred merge authorization and SHA binding
+The `merge` subcommand SHALL treat labels as eligibility signals, not
+authorization. Before granting deferred approval, merging, or enqueueing a PR,
+it SHALL verify that the PR opener is a trusted dependency bot and repeat
+commit-author, changed-file scope, suspicious-path, and submodule validation.
+Validation errors SHALL fail closed. When invoked with `head-sha`, it SHALL
+evaluate checks for that SHA, confirm the PR still has that SHA before approval,
+and pass the SHA to the GitHub merge API.
+
+#### Scenario: Human PR has merge labels
+- **WHEN** a human-authored PR has `approved` and `lgtm` labels and passing CI
+- **THEN** the merge subcommand SHALL NOT submit an approval, merge, or enqueue it
+
+#### Scenario: PR head changes after check-suite event
+- **WHEN** the PR head SHA differs from the `head-sha` passed to the merge subcommand
+- **THEN** the merge subcommand SHALL NOT submit an approval, merge, or enqueue it
 
 #### Scenario: Deferred merge after all checks complete
 - **WHEN** a check suite completes, the auto-merge workflow invokes `deptriage merge` with the check suite's head SHA
