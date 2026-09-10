@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -37,6 +38,7 @@ const (
 	flagAutoApprove    = "auto-approve"
 	flagAutoMerge      = "auto-merge"
 	flagClassifyOutput = "classify-output"
+	flagContextOutput  = "context-output"
 	flagDryRun         = "dry-run"
 	flagTrustedBot     = "trusted-bot"
 	flagSuspiciousPath = "suspicious-path"
@@ -59,26 +61,26 @@ func main() {
 
 var rootCmd = &cobra.Command{
 	Use:   "deptriage",
-	Short: "Dependency PR triage and AI impact analysis",
-	Long:  "Classify dependency PRs by semver bump type, detect risk patterns, and run AI-assisted impact analysis.",
-}
-
-var classifyCmd = &cobra.Command{
-	Use:   "classify",
-	Short: "Classify a dependency PR by semver bump type and risk level",
-	RunE:  runClassify,
+	Short: "Dependency PR triage and deterministic inspection",
+	Long:  "Classify dependency PRs, gather deterministic inspection evidence, and enforce merge policy.",
 }
 
 var analyzeCmd = &cobra.Command{
 	Use:   "analyze",
-	Short: "Run AI-assisted impact analysis on a dependency PR",
+	Short: "Gather deterministic dependency inspection evidence (LLM analysis removed)",
 	RunE:  runAnalyze,
 }
 
 var bothCmd = &cobra.Command{
 	Use:   "both",
-	Short: "Run classify then analyze in sequence",
+	Short: "Run classification followed by deterministic dependency inspection",
 	RunE:  runBoth,
+}
+
+var classifyCmd = &cobra.Command{
+	Use:   "classify",
+	Short: "Classify a dependency PR by semver bump type and policy risk hints",
+	RunE:  runClassify,
 }
 
 var mergeCmd = &cobra.Command{
@@ -103,15 +105,17 @@ func init() {
 	classifyCmd.Flags().StringSlice(flagSuspiciousPath, envStringSlice("INPUT_SUSPICIOUS_PATHS"), "Additional suspicious path prefixes (added to defaults)")
 	classifyCmd.Flags().StringSlice(flagExpectedFile, envStringSlice("INPUT_EXPECTED_FILES"), "Additional expected file patterns for scope validation (added to defaults)")
 
-	// Analyze-specific flags
-	analyzeCmd.Flags().String(flagProvider, envStr("INPUT_LLM_PROVIDER", "gemini"), "LLM provider (gemini, claude)")
-	analyzeCmd.Flags().String(flagAPIKey, envStr("INPUT_API_KEY", ""), "LLM provider API key")
-	analyzeCmd.Flags().String(flagModel, envStr("INPUT_LLM_MODEL", ""), "LLM model name (provider-dependent default)")
-	analyzeCmd.Flags().Bool(flagAutoApprove, envBool("INPUT_AUTO_APPROVE"), "Enable formal APPROVE review for low-risk patches")
-	analyzeCmd.Flags().Bool(flagAutoMerge, envBool("INPUT_AUTO_MERGE"), "Merge eligible PRs after analysis (requires auto-approve)")
+	// Analyze retains its former LLM flags as no-op compatibility flags. The
+	// command gathers deterministic evidence only; it never calls an LLM.
+	analyzeCmd.Flags().String(flagProvider, envStr("INPUT_LLM_PROVIDER", "gemini"), "Deprecated and ignored: LLM provider")
+	analyzeCmd.Flags().String(flagAPIKey, envStr("INPUT_API_KEY", ""), "Deprecated and ignored: LLM provider API key")
+	analyzeCmd.Flags().String(flagModel, envStr("INPUT_LLM_MODEL", ""), "Deprecated and ignored: LLM model")
+	analyzeCmd.Flags().Bool(flagAutoApprove, envBool("INPUT_AUTO_APPROVE"), "Deprecated and ignored by analyze")
+	analyzeCmd.Flags().Bool(flagAutoMerge, envBool("INPUT_AUTO_MERGE"), "Deprecated and ignored by analyze")
 	analyzeCmd.Flags().String(flagClassifyOutput, "/tmp/deptriage-classify.json", "Path to classify result JSON")
+	analyzeCmd.Flags().String(flagContextOutput, envStr("INPUT_CONTEXT_OUTPUT", defaultContextOutput()), "Path to deterministic inspection report JSON")
 
-	// Both command inherits all flags from classify and analyze
+	// Both retains the historical command shape for Action consumers.
 	bothCmd.Flags().AddFlagSet(classifyCmd.Flags())
 	bothCmd.Flags().AddFlagSet(analyzeCmd.Flags())
 
@@ -147,39 +151,30 @@ func runClassify(cmd *cobra.Command, args []string) error {
 	}
 
 	writeGitHubOutput("bump-type", result.BumpType.String())
-	writeGitHubOutput("context-json", outputFile)
 	return nil
 }
 
 func runAnalyze(cmd *cobra.Command, args []string) error {
-	providerName, _ := cmd.Flags().GetString(flagProvider)
-	apiKey, _ := cmd.Flags().GetString(flagAPIKey)
-	model, _ := cmd.Flags().GetString(flagModel)
-	autoApprove, _ := cmd.Flags().GetBool(flagAutoApprove)
-	autoMerge, _ := cmd.Flags().GetBool(flagAutoMerge)
 	classifyOutput, _ := cmd.Flags().GetString(flagClassifyOutput)
-	dryRun, _ := cmd.Flags().GetBool(flagDryRun)
-
+	contextOutput, _ := cmd.Flags().GetString(flagContextOutput)
 	workDir, _ := os.Getwd()
 
-	riskLevel, err := analyze.Run(cmd.Context(), analyze.Options{
-		PRNumber:       prNumber,
-		Repo:           repo,
+	err := analyze.Run(cmd.Context(), analyze.Options{
 		Token:          githubToken,
-		Provider:       providerName,
-		APIKey:         apiKey,
-		Model:          model,
-		AutoApprove:    autoApprove,
-		AutoMerge:      autoMerge,
 		ClassifyOutput: classifyOutput,
-		DryRun:         dryRun,
+		ContextOutput:  contextOutput,
 		WorkDir:        workDir,
 	})
-	// analyze always exits 0
 	if err != nil {
-		slog.Warn("analyze completed with warning", "error", err)
+		// Preserve analyze's historical non-blocking behavior.
+		slog.Warn("deterministic inspection completed with warning", "error", err)
 	}
-	writeGitHubOutput("risk-level", riskLevel.String())
+	writeGitHubOutput("risk-level", "unknown")
+	if err == nil {
+		writeGitHubOutput("context-json", contextOutput)
+	} else {
+		writeGitHubOutput("context-json", "")
+	}
 	return nil
 }
 
@@ -198,7 +193,7 @@ func runMerge(cmd *cobra.Command, args []string) error {
 	suspiciousPaths, _ := cmd.Flags().GetStringSlice(flagSuspiciousPath)
 	expectedFiles, _ := cmd.Flags().GetStringSlice(flagExpectedFile)
 
-	err := merge.Run(cmd.Context(), merge.Options{
+	return merge.Run(cmd.Context(), merge.Options{
 		PRNumber:        prNumber,
 		HeadSHA:         headSHA,
 		Repo:            repo,
@@ -208,10 +203,6 @@ func runMerge(cmd *cobra.Command, args []string) error {
 		SuspiciousPaths: suspiciousPaths,
 		ExpectedFiles:   expectedFiles,
 	})
-	if err != nil {
-		slog.Warn("merge completed with warning", "error", err)
-	}
-	return nil
 }
 
 // writeGitHubOutput appends a key=value pair to $GITHUB_OUTPUT if running in GitHub Actions.
@@ -236,6 +227,13 @@ func envStr(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+func defaultContextOutput() string {
+	if workspace := os.Getenv("GITHUB_WORKSPACE"); workspace != "" {
+		return filepath.Join(workspace, "deptriage-context.json")
+	}
+	return "/tmp/deptriage-context.json"
 }
 
 func envInt(key string, fallback int) int {

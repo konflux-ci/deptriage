@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Merge eligible PRs via GitHub API
-The system SHALL merge dependency PRs that have been approved by the classify phase and pass all CI checks, when auto-merge is enabled. The merge decision is driven by deterministic approval (labels) and CI status, not by the AI risk assessment. The AI risk level is informational — HIGH risk is signaled via the `risk/high` label and a COMMENT review, but does not block merge via review state.
+The system SHALL merge trusted dependency PRs that have been approved by the classify phase and pass all CI checks. The merge decision is driven only by deterministic authorization, labels, and CI status.
 
 Merge eligibility requires ALL of the following:
 1. The `auto-merge` flag is enabled
@@ -10,19 +10,14 @@ Merge eligibility requires ALL of the following:
 4. The AI risk level is NOT `high`
 5. All CI check runs on the PR head SHA are `success`, `neutral`, or `skipped` (excluding the deptriage workflow itself). A `cancelled` check fails the merge gate because it did not complete successfully. The system also evaluates legacy commit statuses when the token has `statuses: read` permission; if the permission is absent (403), the legacy status check is skipped gracefully.
 
-#### Scenario: Approved PR with all checks passing and LOW risk
-- **WHEN** auto-merge is enabled, auto-approve is enabled, the PR has `approved` and `lgtm` labels, the AI risk level is `low`, and all CI checks pass
+#### Scenario: Approved PR with all checks passing
+- **WHEN** a trusted PR has `approved` and `lgtm` labels and all CI checks pass
 - **THEN** the system SHALL merge the PR using the GitHub REST API with squash merge method
 
-#### Scenario: Approved PR with all checks passing and MEDIUM risk
-- **WHEN** auto-merge is enabled, auto-approve is enabled, the PR has `approved` and `lgtm` labels, the AI risk level is `medium`, and all CI checks pass
-- **THEN** the system SHALL merge the PR
-- **RATIONALE:** The AI risk level is informational. Experience shows that dependency updates (e.g., Tekton task digest bumps) flagged as MEDIUM risk are safe when CI checks — especially Red Hat Konflux pipeline checks — pass. The classify phase's deterministic approval and CI status are the real safety gates.
-
 #### Scenario: HIGH risk blocks merge
-- **WHEN** the AI risk level is `high`
+- **WHEN** the PR has a `risk/high` label
 - **THEN** the system SHALL NOT attempt to merge the PR
-- **RATIONALE:** HIGH risk is signaled via the `risk/high` label; the merge subcommand skips PRs with this label. The review is a COMMENT, not REQUEST_CHANGES, so a human engineer can still merge manually if they determine the change is safe.
+- **RATIONALE:** The merge subcommand skips PRs with this label. A human engineer can still merge manually if they determine the change is safe.
 
 #### Scenario: CI checks still pending
 - **WHEN** auto-merge is enabled and the PR is eligible, but one or more CI checks have status `pending` or `queued`
@@ -35,17 +30,8 @@ Merge eligibility requires ALL of the following:
 - **WHEN** auto-merge is enabled and the PR is eligible, but one or more CI checks have status `failure` or `error`
 - **THEN** the system SHALL NOT merge the PR
 
-#### Scenario: auto-merge disabled (default)
-- **WHEN** auto-merge is not enabled (default: `false`)
-- **THEN** the system SHALL NOT attempt to merge the PR regardless of risk level, labels, or check status
-
-#### Scenario: auto-merge enabled but auto-approve disabled
-- **WHEN** auto-merge is enabled but auto-approve is disabled
-- **THEN** the system SHALL NOT attempt to merge the PR
-- **RATIONALE:** Auto-approve is a prerequisite — without it, `approved`/`lgtm` labels will not be present, and the classify phase has not made an approval decision.
-
-#### Scenario: auto-approve labels not present
-- **WHEN** auto-merge is enabled, auto-approve is enabled, but the `approved` and `lgtm` labels are not present on the PR, and the PR is not eligible for deferred approval
+#### Scenario: Approval labels not present
+- **WHEN** the `approved` and `lgtm` labels are not present on the PR, and the PR is not eligible for deferred approval
 - **THEN** the system SHALL NOT merge the PR
 - **RATIONALE:** The absence of labels means the classify phase determined the PR is not eligible for auto-approval (e.g., major bump).
 
@@ -108,14 +94,6 @@ The system SHALL evaluate both GitHub Check Runs (modern API) and commit statuse
 - **WHEN** the system evaluates CI status and the legacy commit status API is accessible
 - **THEN** the system SHALL include legacy commit statuses in the CI status evaluation alongside check runs
 - **RATIONALE:** Some CI systems (e.g., external integrations) may report status via the legacy API. When accessible, both sources should be evaluated for complete coverage.
-
-### Requirement: Action interface for auto-merge
-The `action.yml` SHALL expose an `auto-merge` input, separate from the existing `auto-approve` input.
-
-#### Scenario: auto-merge input
-- **WHEN** the action is invoked with `auto-merge: 'true'`
-- **THEN** the system SHALL enable auto-merge behavior in the analyze phase
-- **AND** the default value SHALL be `'false'`
 
 #### Scenario: Permissions requirement
 - **WHEN** auto-merge is enabled
