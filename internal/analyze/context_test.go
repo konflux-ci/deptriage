@@ -51,7 +51,7 @@ func main() {}
 		Packages: []types.PackageInfo{{Name: badModule}},
 	}
 
-	ctxJSON := GatherContext(context.Background(), result, nil, nil, dir)
+	ctxJSON := GatherContext(context.Background(), result, nil, dir)
 	if len(ctxJSON.Packages) != 1 {
 		t.Fatalf("packages: got %d want 1", len(ctxJSON.Packages))
 	}

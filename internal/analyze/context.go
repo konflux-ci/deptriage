@@ -21,7 +21,6 @@ import (
 	"encoding/json"
 	"log/slog"
 
-	ghclient "github.com/konflux-ci/deptriage/internal/github"
 	"github.com/konflux-ci/deptriage/internal/imports"
 	"github.com/konflux-ci/deptriage/internal/security"
 	"github.com/konflux-ci/deptriage/internal/types"
@@ -29,8 +28,9 @@ import (
 	gh "github.com/google/go-github/v86/github"
 )
 
-// GatherContext assembles the full context JSON for LLM consumption.
-func GatherContext(ctx context.Context, result *types.ClassifyResult, ghClient *ghclient.Client, rawGHClient *gh.Client, workDir string) *types.ContextJSON {
+// GatherContext assembles deterministic dependency-inspection evidence. Its
+// result is written to a local JSON file and is never sent to an LLM.
+func GatherContext(ctx context.Context, result *types.ClassifyResult, rawGHClient *gh.Client, workDir string) *types.ContextJSON {
 	ctxJSON := &types.ContextJSON{
 		PRBody:              result.PRBody,
 		RiskHints:           result.RiskHints,

@@ -17,77 +17,29 @@ limitations under the License.
 package analyze
 
 import (
+	"context"
+	"errors"
+	"os"
+	"path/filepath"
 	"testing"
-
-	"github.com/konflux-ci/deptriage/internal/types"
 )
 
-func TestShouldAttemptMerge(t *testing.T) {
-	tests := []struct {
-		name        string
-		autoMerge   bool
-		autoApprove bool
-		risk        types.RiskLevel
-		want        bool
-	}{
-		{
-			name:        "all conditions met with low risk",
-			autoMerge:   true,
-			autoApprove: true,
-			risk:        types.RiskLow,
-			want:        true,
-		},
-		{
-			name:        "medium risk still eligible",
-			autoMerge:   true,
-			autoApprove: true,
-			risk:        types.RiskMedium,
-			want:        true,
-		},
-		{
-			name:        "high risk blocks merge",
-			autoMerge:   true,
-			autoApprove: true,
-			risk:        types.RiskHigh,
-			want:        false,
-		},
-		{
-			name:        "unknown risk eligible",
-			autoMerge:   true,
-			autoApprove: true,
-			risk:        types.RiskUnknown,
-			want:        true,
-		},
-		{
-			name:        "auto-merge disabled",
-			autoMerge:   false,
-			autoApprove: true,
-			risk:        types.RiskLow,
-			want:        false,
-		},
-		{
-			name:        "auto-approve disabled",
-			autoMerge:   true,
-			autoApprove: false,
-			risk:        types.RiskLow,
-			want:        false,
-		},
-		{
-			name:        "both disabled",
-			autoMerge:   false,
-			autoApprove: false,
-			risk:        types.RiskLow,
-			want:        false,
-		},
+func TestRunRemovesStaleReportWhenInspectionFails(t *testing.T) {
+	dir := t.TempDir()
+	report := filepath.Join(dir, "report.json")
+	if err := os.WriteFile(report, []byte(`{"stale":true}`), 0644); err != nil {
+		t.Fatalf("writing stale report: %v", err)
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := shouldAttemptMerge(tt.autoMerge, tt.autoApprove, tt.risk)
-			if got != tt.want {
-				t.Errorf("shouldAttemptMerge(%v, %v, %v) = %v, want %v",
-					tt.autoMerge, tt.autoApprove, tt.risk, got, tt.want)
-			}
-		})
+	err := Run(context.Background(), Options{
+		ClassifyOutput: filepath.Join(dir, "missing-classify.json"),
+		ContextOutput:  report,
+		WorkDir:        dir,
+	})
+	if err == nil {
+		t.Fatal("Run() error = nil, want error")
+	}
+	if _, statErr := os.Stat(report); !errors.Is(statErr, os.ErrNotExist) {
+		t.Errorf("stale report still exists or could not be checked: %v", statErr)
 	}
 }
