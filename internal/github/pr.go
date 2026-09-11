@@ -330,7 +330,7 @@ func (c *Client) ChecksAllPassedForSHA(ctx context.Context, ref, excludeWorkflow
 				continue
 			}
 			conclusion := cr.GetConclusion()
-			if conclusion != "success" && conclusion != "neutral" && conclusion != "skipped" && conclusion != "cancelled" {
+			if conclusion != "success" && conclusion != "neutral" && conclusion != "skipped" {
 				return ChecksFailed, nil
 			}
 		}
