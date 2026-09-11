@@ -22,7 +22,8 @@ to help reviewers prioritize their work.
 - **Supply-chain hardening** -- validates bot PR author identity against commit
   authors, detects changes to known attack vector paths (`.claude/`, `.vscode/`,
   `.github/workflows/`), and verifies dependency PRs only touch expected files;
-  blocks auto-approve, auto-merge, and deferred approval when concerns are found
+  blocks auto-approve, auto-merge, and deferred approval when concerns are found.
+  The deferred merge path repeats these checks instead of trusting mutable labels.
 - **Security advisories** -- queries GitHub Global Security Advisories API and
   optionally runs `govulncheck` for reachability analysis
 - **LLM impact analysis** -- assembles structured context and calls Gemini or
@@ -46,8 +47,9 @@ The project is a standalone Go module with the following subcommands:
   package extraction, risk hints, label application); can fail the workflow
 - `deptriage analyze` -- runs the analysis pipeline (context gathering, LLM
   call, comment posting, review submission); always exits 0 to avoid blocking CI
-- `deptriage merge` -- evaluates eligible PRs for auto-merge (labels, CI checks,
-  risk level) and merges via the GitHub API; always exits 0
+- `deptriage merge` -- evaluates eligible PRs for auto-merge (trusted bot
+  provenance, file scope, labels, and CI checks) and merges via the GitHub API;
+  always exits 0
 
 A `both` subcommand runs classify then analyze in sequence, with an optional
 inline merge attempt at the end.
@@ -79,7 +81,8 @@ deptriage classify --repo owner/repo --pr-number 42 --github-token $TOKEN
 deptriage both --repo owner/repo --pr-number 42 --github-token $TOKEN \
   --api-key $GEMINI_API_KEY --provider gemini --auto-approve --auto-merge
 
-# Merge eligible PRs by head SHA (used in check_suite workflows)
+# Merge eligible PRs by head SHA (used in check_suite workflows). The PR must
+# still point to this SHA when deptriage approves or merges it.
 deptriage merge --repo owner/repo --head-sha $SHA --github-token $TOKEN
 ```
 
@@ -171,15 +174,16 @@ See `.github/workflows/example-dep-triage-and-auto-merge.yaml` for a ready-to-co
 | `auto-approve` | `false` | Apply `approved`/`lgtm` labels for eligible low-risk patches and minors |
 | `auto-merge` | `false` | Merge eligible PRs after analysis (requires `auto-approve`) |
 | `dry-run` | `false` | Suppress all GitHub API writes; log what would happen |
-| `head-sha` | | Head SHA to find PRs for (used by `merge` with `check_suite` trigger) |
-| `trusted-bots` | | Comma-separated additional trusted bot logins (added to defaults) |
-| `suspicious-paths` | | Comma-separated additional suspicious path prefixes (added to defaults) |
-| `expected-files` | | Comma-separated additional expected file patterns for scope validation (added to defaults) |
+| `head-sha` | | Head SHA to find PRs for; checks and merge are bound to this SHA |
+| `trusted-bots` | | Comma-separated additional trusted bot logins for classification and deferred merge (added to defaults) |
+| `suspicious-paths` | | Comma-separated additional suspicious path prefixes for classification and deferred merge |
+| `expected-files` | | Comma-separated additional expected file patterns for classification and deferred merge |
 
 ## Supply-Chain Hardening
 
 deptriage includes four supply-chain validators that run automatically during
-classification. These are always-on with no flag to disable.
+classification and again before deferred merge. These are always-on with no
+flag to disable.
 
 ### PR author validation
 
@@ -189,7 +193,8 @@ from a different author, the PR is flagged with a `supply-chain/author-mismatch`
 label and blocked from auto-approve and auto-merge.
 
 Default trusted bots: `renovate[bot]`, `red-hat-konflux[bot]`, `dependabot[bot]`.
-Add custom bot logins via the `trusted-bots` input.
+Add custom bot logins via the `trusted-bots` input. Configure this input on
+both the classification and deferred auto-merge action invocations.
 
 ### Suspicious file detection
 
@@ -238,11 +243,14 @@ engineer must review the upstream changes.
 - Any supply-chain finding blocks auto-approve in the classify phase
 - The analyze phase skips formal `APPROVE` reviews when supply-chain findings
   exist, even if the LLM assesses LOW risk
-- The merge phase rejects PRs with any `supply-chain/*` label, on both the
-  primary merge path and the deferred-approval path
-- API errors during commit or file fetch are **fail-closed** for bot PRs --
-  the PR is treated as having a supply-chain concern and auto-approve is
-  blocked. Human PRs are unaffected since they have no auto-merge path
+- The merge phase rejects PRs with any `supply-chain/*` label and independently
+  revalidates trusted-bot authorship, commit authors, changed-file scope,
+  suspicious paths, and submodule changes before deferred approval or merge
+- API errors during this merge-time validation are **fail-closed**. Human PRs
+  and untrusted bots are explicitly ineligible for deptriage deferred merge
+- For a `head-sha` invocation, the PR is rechecked before approval and merge;
+  GitHub receives that SHA in the merge request, preventing a later push from
+  being merged using earlier CI results
 - If a supply-chain label cannot be applied (API error, permissions), any
   existing `approved`/`lgtm` labels are removed as a fallback to prevent
   stale approval from letting a tampered PR merge

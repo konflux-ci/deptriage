@@ -18,6 +18,7 @@ package github
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -37,6 +38,159 @@ func newTestClient(t *testing.T, server *httptest.Server) *Client {
 		inner: ghClient,
 		owner: "testorg",
 		repo:  "testrepo",
+	}
+}
+
+func TestMergePRAtSHA(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("PUT /repos/testorg/testrepo/pulls/1/merge", func(w http.ResponseWriter, r *http.Request) {
+		defer func() { _ = r.Body.Close() }()
+		var request struct {
+			SHA         string `json:"sha"`
+			MergeMethod string `json:"merge_method"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Fatalf("decoding merge request: %v", err)
+		}
+		if request.SHA != "expected-sha" {
+			t.Errorf("merge SHA = %q, want expected-sha", request.SHA)
+		}
+		if request.MergeMethod != "squash" {
+			t.Errorf("merge method = %q, want squash", request.MergeMethod)
+		}
+		_, _ = fmt.Fprint(w, `{"merged": true}`)
+	})
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	if err := newTestClient(t, server).MergePRAtSHA(context.Background(), 1, "squash", "expected-sha"); err != nil {
+		t.Fatalf("MergePRAtSHA() error = %v", err)
+	}
+}
+
+func TestSubmitReviewAtSHA(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /repos/testorg/testrepo/pulls/1/reviews", func(w http.ResponseWriter, r *http.Request) {
+		defer func() { _ = r.Body.Close() }()
+		var request struct {
+			CommitID string `json:"commit_id"`
+			Event    string `json:"event"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Fatalf("decoding review request: %v", err)
+		}
+		if request.CommitID != "expected-sha" {
+			t.Errorf("review commit ID = %q, want expected-sha", request.CommitID)
+		}
+		if request.Event != "APPROVE" {
+			t.Errorf("review event = %q, want APPROVE", request.Event)
+		}
+		_, _ = fmt.Fprint(w, `{}`)
+	})
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	if err := newTestClient(t, server).SubmitReviewAtSHA(context.Background(), 1, "APPROVE", "approved", "expected-sha"); err != nil {
+		t.Fatalf("SubmitReviewAtSHA() error = %v", err)
+	}
+}
+
+func TestSubmitReviewOmitsEmptyCommitID(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /repos/testorg/testrepo/pulls/1/reviews", func(w http.ResponseWriter, r *http.Request) {
+		defer func() { _ = r.Body.Close() }()
+		var request map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Fatalf("decoding review request: %v", err)
+		}
+		if _, ok := request["commit_id"]; ok {
+			t.Errorf("legacy SubmitReview request unexpectedly included commit_id: %#v", request["commit_id"])
+		}
+		_, _ = fmt.Fprint(w, `{}`)
+	})
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	if err := newTestClient(t, server).SubmitReview(context.Background(), 1, "COMMENT", "comment"); err != nil {
+		t.Fatalf("SubmitReview() error = %v", err)
+	}
+}
+
+func TestChecksAllPassedForSHACancelledCheckFails(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /repos/testorg/testrepo/commits/test-sha/check-runs", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprint(w, `{"total_count": 1, "check_runs": [{"name": "build", "status": "completed", "conclusion": "cancelled"}]}`)
+	})
+	mux.HandleFunc("GET /repos/testorg/testrepo/commits/test-sha/status", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprint(w, `{"state": "success", "statuses": []}`)
+	})
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	status, err := newTestClient(t, server).ChecksAllPassedForSHA(context.Background(), "test-sha", "")
+	if err != nil {
+		t.Fatalf("ChecksAllPassedForSHA() error = %v", err)
+	}
+	if status != ChecksFailed {
+		t.Errorf("ChecksAllPassedForSHA() = %v, want ChecksFailed for cancelled check", status)
+	}
+}
+
+func TestFetchPRRecordsHeadRepository(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /repos/testorg/testrepo/pulls/1", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprint(w, `{
+            "number": 1,
+			"base": {"ref": "main", "sha": "base-sha"},
+            "head": {
+                "ref": "dependency-update",
+                "sha": "head-sha",
+                "repo": {"name": "fork-repo", "owner": {"login": "fork-owner"}}
+            }
+        }`)
+	})
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	pr, err := newTestClient(t, server).FetchPR(context.Background(), 1)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if pr.HeadOwner != "fork-owner" || pr.HeadRepo != "fork-repo" || pr.HeadSHA != "head-sha" || pr.BaseSHA != "base-sha" {
+		t.Errorf("snapshot metadata = base %s, head %s/%s at %s; want base-sha and fork-owner/fork-repo at head-sha", pr.BaseSHA, pr.HeadOwner, pr.HeadRepo, pr.HeadSHA)
+	}
+}
+
+func TestFetchPRSnapshotUsesCapturedSHAs(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /repos/fork-owner/fork-repo/compare/base-sha...head-sha", func(w http.ResponseWriter, r *http.Request) {
+		if got := r.URL.Query().Get("per_page"); got != "100" {
+			t.Errorf("per_page = %q, want 100", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprint(w, `{
+          "total_commits": 1,
+          "commits": [{"sha": "head-sha", "author": {"login": "renovate[bot]"}}],
+          "files": [{"filename": "go.mod"}, {"filename": "go.sum"}]
+        }`)
+	})
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	commits, files, err := newTestClient(t, server).FetchPRSnapshot(context.Background(), &PRData{
+		BaseSHA: "base-sha", HeadSHA: "head-sha", HeadOwner: "fork-owner", HeadRepo: "fork-repo",
+	})
+	if err != nil {
+		t.Fatalf("FetchPRSnapshot() error = %v", err)
+	}
+	if len(commits) != 1 || commits[0] != (CommitInfo{SHA: "head-sha", Author: "renovate[bot]"}) {
+		t.Errorf("commits = %+v, want trusted head commit", commits)
+	}
+	if len(files) != 2 || files[0] != "go.mod" || files[1] != "go.sum" {
+		t.Errorf("files = %v, want [go.mod go.sum]", files)
 	}
 }
 
@@ -242,6 +396,9 @@ func TestFetchPRFiles_Empty(t *testing.T) {
 func TestFetchSubmodulePaths(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /repos/testorg/testrepo/git/trees/main", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("recursive") != "1" {
+			t.Errorf("recursive query = %q, want 1", r.URL.Query().Get("recursive"))
+		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = fmt.Fprint(w, `{
 			"sha": "abc123",
@@ -250,7 +407,8 @@ func TestFetchSubmodulePaths(t *testing.T) {
 				{"path": "go.sum", "mode": "100644", "type": "blob", "sha": "bbb"},
 				{"path": "internal", "mode": "040000", "type": "tree", "sha": "ccc"},
 				{"path": "oauth2-proxy", "mode": "160000", "type": "commit", "sha": "ddd"},
-				{"path": "another-submodule", "mode": "160000", "type": "commit", "sha": "eee"}
+				{"path": "another-submodule", "mode": "160000", "type": "commit", "sha": "eee"},
+				{"path": "vendor/nested-submodule", "mode": "160000", "type": "commit", "sha": "fff"}
 			]
 		}`)
 	})
@@ -262,11 +420,32 @@ func TestFetchSubmodulePaths(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(paths) != 2 {
-		t.Fatalf("got %d submodule paths, want 2: %v", len(paths), paths)
+	if len(paths) != 3 {
+		t.Fatalf("got %d submodule paths, want 3: %v", len(paths), paths)
 	}
-	if paths[0] != "oauth2-proxy" || paths[1] != "another-submodule" {
-		t.Errorf("got paths %v, want [oauth2-proxy another-submodule]", paths)
+	if paths[0] != "oauth2-proxy" || paths[1] != "another-submodule" || paths[2] != "vendor/nested-submodule" {
+		t.Errorf("got paths %v, want nested submodule path", paths)
+	}
+}
+
+func TestFetchSubmodulePathsForRepo(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /repos/fork-owner/fork-repo/git/trees/head-sha", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("recursive") != "1" {
+			t.Errorf("recursive query = %q, want 1", r.URL.Query().Get("recursive"))
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprint(w, `{"tree": [{"path": "vendor/nested", "mode": "160000", "type": "commit"}]}`)
+	})
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	paths, err := newTestClient(t, server).FetchSubmodulePathsForRepo(context.Background(), "fork-owner", "fork-repo", "head-sha")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(paths) != 1 || paths[0] != "vendor/nested" {
+		t.Errorf("got paths %v, want [vendor/nested]", paths)
 	}
 }
 

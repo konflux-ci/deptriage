@@ -205,6 +205,33 @@ func filterGitHubActionPaths(files []string) []string {
 	return out
 }
 
+// ValidateFileSafety applies the file-based supply-chain checks shared by the
+// classify and deferred-merge paths. Submodule paths should be included in
+// extraPatterns by the caller so legitimate submodule pointers are in scope.
+func ValidateFileSafety(prAuthor string, files, extraBots, extraPaths, extraPatterns []string) []*SupplyChainFinding {
+	isBotPR := IsTrustedBot(prAuthor, extraBots)
+	isActionsUpdate := isBotPR && IsGitHubActionsUpdate(files)
+
+	suspiciousFiles := files
+	if isActionsUpdate {
+		suspiciousFiles = filterGitHubActionPaths(files)
+	}
+
+	var findings []*SupplyChainFinding
+	if f := DetectSuspiciousFiles(suspiciousFiles, extraPaths); f != nil {
+		findings = append(findings, f)
+	}
+
+	expectedFiles := extraPatterns
+	if isActionsUpdate {
+		expectedFiles = append(append([]string{}, expectedFiles...), gitHubActionPrefixes...)
+	}
+	if f := ValidateDiffScope(prAuthor, files, extraBots, expectedFiles); f != nil {
+		findings = append(findings, f)
+	}
+	return findings
+}
+
 func matchesAnyPrefix(path string, prefixes []string) bool {
 	for _, p := range prefixes {
 		if strings.HasPrefix(path, p) {

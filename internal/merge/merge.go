@@ -20,9 +20,11 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"slices"
 	"strings"
 	"time"
 
+	"github.com/konflux-ci/deptriage/internal/classify"
 	ghclient "github.com/konflux-ci/deptriage/internal/github"
 	"github.com/konflux-ci/deptriage/internal/types"
 )
@@ -31,11 +33,14 @@ const mergeCheckName = "Merge if all checks pass"
 
 // Options configures the merge command.
 type Options struct {
-	PRNumber int
-	HeadSHA  string
-	Repo     string
-	Token    string
-	DryRun   bool
+	PRNumber        int
+	HeadSHA         string
+	Repo            string
+	Token           string
+	DryRun          bool
+	TrustedBots     []string
+	SuspiciousPaths []string
+	ExpectedFiles   []string
 }
 
 // Run attempts to merge eligible PRs. Always exits 0.
@@ -46,7 +51,7 @@ func Run(ctx context.Context, opts Options) error {
 		return runForSHA(ctx, client, opts)
 	}
 	if opts.PRNumber > 0 {
-		tryMergePR(ctx, client, opts.PRNumber, opts.DryRun)
+		tryMergePR(ctx, client, opts)
 	}
 	return nil
 }
@@ -62,7 +67,9 @@ func runForSHA(ctx context.Context, client *ghclient.Client, opts Options) error
 		return nil
 	}
 	for _, pr := range prs {
-		tryMergePR(ctx, client, pr, opts.DryRun)
+		prOpts := opts
+		prOpts.PRNumber = pr
+		tryMergePR(ctx, client, prOpts)
 	}
 	return nil
 }
@@ -101,7 +108,9 @@ func isDeferredApprovalEligible(labels []string) bool {
 	return isPatchOrMinor && hasRiskHint && !labelSet[types.LabelRiskHigh]
 }
 
-func tryMergePR(ctx context.Context, client *ghclient.Client, prNumber int, dryRun bool) {
+func tryMergePR(ctx context.Context, client *ghclient.Client, opts Options) {
+	prNumber := opts.PRNumber
+	dryRun := opts.DryRun
 	slog.Info("evaluating PR for auto-merge", types.LogKeyPR, prNumber)
 
 	pr, err := client.FetchPR(ctx, prNumber)
@@ -109,27 +118,28 @@ func tryMergePR(ctx context.Context, client *ghclient.Client, prNumber int, dryR
 		slog.Warn("failed to fetch PR", types.LogKeyPR, prNumber, "error", err)
 		return
 	}
+	if opts.HeadSHA != "" && pr.HeadSHA != opts.HeadSHA {
+		slog.Warn("skipping: PR head changed since check_suite event", types.LogKeyPR, prNumber, "eventSHA", opts.HeadSHA, "currentSHA", pr.HeadSHA)
+		return
+	}
+	if !isTrustedMergeAuthor(pr.Author, opts.TrustedBots) {
+		slog.Warn("skipping: PR author is not a trusted dependency bot", types.LogKeyPR, prNumber, "author", pr.Author)
+		return
+	}
+	if !validateSupplyChain(ctx, client, pr, opts) {
+		return
+	}
 
 	eligible := isMergeEligible(pr.Labels)
 
 	if !eligible && isDeferredApprovalEligible(pr.Labels) {
-		checkStatus, err := waitForChecks(ctx, client, prNumber, mergeCheckName)
+		checkStatus, err := waitForChecks(ctx, client, prNumber, pr.HeadSHA, mergeCheckName)
 		if err != nil {
 			slog.Warn("failed to check CI status for deferred approval", types.LogKeyPR, prNumber, "error", err)
 			return
 		}
 		if checkStatus == ghclient.ChecksPassed {
-			slog.Info("CI checks passed, granting deferred approval for patch with risk hints", types.LogKeyPR, prNumber)
-			for _, label := range []string{types.LabelApproved, types.LabelLGTM} {
-				if dryRun {
-					slog.Info("[DRY-RUN] would apply deferred approval label", types.LogKeyLabel, label, types.LogKeyPR, prNumber)
-					continue
-				}
-				if err := client.EnsureLabel(ctx, prNumber, label, types.ColorGreen, "Deferred approval: CI checks passed"); err != nil {
-					slog.Warn("failed to apply deferred approval label", types.LogKeyLabel, label, "error", err)
-					return
-				}
-			}
+			slog.Info("CI checks passed, allowing deferred merge for patch with risk hints", types.LogKeyPR, prNumber)
 			eligible = true
 		}
 	}
@@ -139,13 +149,22 @@ func tryMergePR(ctx context.Context, client *ghclient.Client, prNumber int, dryR
 		return
 	}
 
-	checkStatus, err := waitForChecks(ctx, client, prNumber, mergeCheckName)
+	checkStatus, err := waitForChecks(ctx, client, prNumber, pr.HeadSHA, mergeCheckName)
 	if err != nil {
 		slog.Warn("failed to check CI status", types.LogKeyPR, prNumber, "error", err)
 		return
 	}
 	if checkStatus != ghclient.ChecksPassed {
 		slog.Info("skipping: not all CI checks have passed", types.LogKeyPR, prNumber)
+		return
+	}
+	currentPR, err := client.FetchPR(ctx, prNumber)
+	if err != nil {
+		slog.Warn("skipping: unable to recheck PR head before approval", types.LogKeyPR, prNumber, "error", err)
+		return
+	}
+	if currentPR.HeadSHA != pr.HeadSHA {
+		slog.Warn("skipping: PR head changed after checks completed", types.LogKeyPR, prNumber, "checkedSHA", pr.HeadSHA, "currentSHA", currentPR.HeadSHA)
 		return
 	}
 
@@ -155,12 +174,17 @@ func tryMergePR(ctx context.Context, client *ghclient.Client, prNumber int, dryR
 		slog.Info("[DRY-RUN] would merge PR", types.LogKeyPR, prNumber, "method", "squash")
 		return
 	}
-	if err := client.SubmitReview(ctx, prNumber, types.ReviewApprove, "All merge conditions met — auto-approved by deptriage."); err != nil {
+	if err := client.SubmitReviewAtSHA(ctx, prNumber, types.ReviewApprove, "All merge conditions met — auto-approved by deptriage.", pr.HeadSHA); err != nil {
 		slog.Warn("failed to submit approval review", types.LogKeyPR, prNumber, "error", err)
 		return
 	}
-	if err := client.MergePR(ctx, prNumber, "squash"); err != nil {
+	if err := client.MergePRAtSHA(ctx, prNumber, "squash", pr.HeadSHA); err != nil {
 		if errors.Is(err, ghclient.ErrMergeQueueRequired) {
+			currentPR, fetchErr := client.FetchPR(ctx, prNumber)
+			if fetchErr != nil || currentPR.HeadSHA != pr.HeadSHA {
+				slog.Warn("skipping queue entry: PR head changed or could not be verified", types.LogKeyPR, prNumber, "error", fetchErr)
+				return
+			}
 			slog.Info("merge queue detected, enqueuing PR", types.LogKeyPR, prNumber)
 			if err := client.EnqueuePR(ctx, pr.NodeID); err != nil {
 				slog.Warn("enqueue failed", types.LogKeyPR, prNumber, "error", err)
@@ -175,14 +199,57 @@ func tryMergePR(ctx context.Context, client *ghclient.Client, prNumber int, dryR
 	slog.Info("PR merged successfully", types.LogKeyPR, prNumber)
 }
 
+func isTrustedMergeAuthor(author string, trustedBots []string) bool {
+	return classify.IsTrustedBot(author, trustedBots)
+}
+
+// validateSupplyChain repeats the provenance and scope checks here because the
+// labels checked below are mutable status indicators, not authorization.
+func validateSupplyChain(ctx context.Context, client *ghclient.Client, pr *ghclient.PRData, opts Options) bool {
+	commits, files, err := client.FetchPRSnapshot(ctx, pr)
+	if err != nil {
+		slog.Warn("skipping: unable to verify PR snapshot", types.LogKeyPR, pr.Number, "error", err)
+		return false
+	}
+	if finding := classify.ValidateAuthor(pr.Author, commits, opts.TrustedBots); finding != nil {
+		slog.Warn("skipping: PR commit author validation failed", types.LogKeyPR, pr.Number, "finding", finding.Key)
+		return false
+	}
+
+	expectedFiles := append([]string{}, opts.ExpectedFiles...)
+	headSubmodulePaths, err := client.FetchSubmodulePathsForRepo(ctx, pr.HeadOwner, pr.HeadRepo, pr.HeadSHA)
+	if err != nil {
+		slog.Warn("skipping: unable to verify head submodule paths", types.LogKeyPR, pr.Number, "error", err)
+		return false
+	}
+	baseSubmodulePaths, err := client.FetchSubmodulePaths(ctx, pr.BaseRef)
+	if err != nil {
+		slog.Warn("skipping: unable to verify base submodule paths", types.LogKeyPR, pr.Number, "error", err)
+		return false
+	}
+	submodulePaths := append(headSubmodulePaths, baseSubmodulePaths...)
+	for _, submodulePath := range submodulePaths {
+		if slices.Contains(files, submodulePath) {
+			slog.Warn("skipping: PR updates a submodule and requires human review", types.LogKeyPR, pr.Number, "path", submodulePath)
+			return false
+		}
+	}
+	expectedFiles = append(expectedFiles, submodulePaths...)
+	if findings := classify.ValidateFileSafety(pr.Author, files, opts.TrustedBots, opts.SuspiciousPaths, expectedFiles); len(findings) > 0 {
+		slog.Warn("skipping: PR file safety validation failed", types.LogKeyPR, pr.Number, "finding", findings[0].Key)
+		return false
+	}
+	return true
+}
+
 const (
 	checkRetryAttempts = 10
 	checkRetryInterval = 90 * time.Second
 )
 
-func waitForChecks(ctx context.Context, client *ghclient.Client, prNumber int, excludeWorkflow string) (ghclient.CheckStatus, error) {
+func waitForChecks(ctx context.Context, client *ghclient.Client, prNumber int, headSHA, excludeWorkflow string) (ghclient.CheckStatus, error) {
 	for attempt := range checkRetryAttempts {
-		status, err := client.ChecksAllPassed(ctx, prNumber, excludeWorkflow)
+		status, err := client.ChecksAllPassedForSHA(ctx, headSHA, excludeWorkflow)
 		if err != nil {
 			return status, err
 		}

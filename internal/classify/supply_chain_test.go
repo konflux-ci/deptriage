@@ -168,6 +168,43 @@ func TestIsGitHubActionsUpdate(t *testing.T) {
 	}
 }
 
+func TestValidateFileSafety(t *testing.T) {
+	tests := []struct {
+		name  string
+		files []string
+		want  int
+	}{
+		{
+			name:  "valid dependency files",
+			files: []string{"go.mod", "go.sum"},
+			want:  0,
+		},
+		{
+			name:  "unexpected source file",
+			files: []string{"go.mod", "main.go"},
+			want:  1,
+		},
+		{
+			name:  "suspicious workflow update with manifest",
+			files: []string{"go.mod", ".github/workflows/release.yaml"},
+			want:  2,
+		},
+		{
+			name:  "pure github actions dependency update permitted",
+			files: []string{".github/workflows/ci.yaml"},
+			want:  0,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := ValidateFileSafety("renovate[bot]", tt.files, nil, nil, nil)
+			if len(got) != tt.want {
+				t.Errorf("ValidateFileSafety() returned %d findings, want %d: %#v", len(got), tt.want, got)
+			}
+		})
+	}
+}
+
 func TestDetectSuspiciousFiles(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -406,5 +443,15 @@ func TestValidateDiffScope(t *testing.T) {
 				t.Errorf("got %d unexpected files, want %d: %v", len(got.Details), tt.wantCount, got.Details)
 			}
 		})
+	}
+}
+
+func TestSupplyChainVerificationFailure(t *testing.T) {
+	finding := supplyChainVerificationFailure("Could not verify submodule paths", "tree response truncated")
+	if finding.Key != "SUPPLY_CHAIN_VERIFICATION_FAILED" {
+		t.Errorf("key = %q, want supply-chain verification failure", finding.Key)
+	}
+	if finding.Label != types.LabelSupplyChainSuspiciousFiles || finding.Color != types.ColorRed {
+		t.Errorf("finding = %+v, want a red blocking supply-chain label", finding)
 	}
 }

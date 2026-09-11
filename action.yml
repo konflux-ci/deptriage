@@ -39,16 +39,16 @@ inputs:
     required: false
     default: "false"
   head-sha:
-    description: "Head SHA to find PRs for (used by merge command with check_suite trigger)"
+    description: "Head SHA to find PRs for; deferred merge checks and merge are bound to this SHA"
     required: false
   trusted-bots:
-    description: "Comma-separated list of additional trusted bot logins for supply-chain validation (added to defaults: renovate[bot], red-hat-konflux[bot], dependabot[bot])"
+    description: "Comma-separated additional trusted bot logins for classification and deferred merge validation (added to defaults: renovate[bot], red-hat-konflux[bot], dependabot[bot])"
     required: false
   suspicious-paths:
-    description: "Comma-separated list of additional suspicious path prefixes for supply-chain validation (added to defaults: .claude/, .vscode/, .github/workflows/, .github/actions/)"
+    description: "Comma-separated additional suspicious path prefixes for classification and deferred merge validation (added to defaults: .claude/, .vscode/, .github/workflows/, .github/actions/)"
     required: false
   expected-files:
-    description: "Comma-separated list of additional expected file patterns for dependency PR scope validation (added to defaults: go.mod, go.sum, vendor/, .tekton/, etc.)"
+    description: "Comma-separated additional expected file patterns for classification and deferred merge scope validation (added to defaults: go.mod, go.sum, vendor/, .tekton/, etc.)"
     required: false
 
 outputs:
@@ -61,7 +61,7 @@ outputs:
 
 runs:
   using: "docker"
-  image: "docker://quay.io/konflux-ci/deptriage@sha256:8b53da230b9845eabb6324554b925f9664b58cb8a27377ea88a3097f6d32858e"
+  image: "docker://quay.io/konflux-ci/deptriage@sha256:60c91518f9d2625c28495e60c4a2bc29933d8748d30cb45f1f643e2fc79edb8d"
   args:
     - ${{ inputs.command }}
   env:

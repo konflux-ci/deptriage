@@ -78,10 +78,17 @@ func (c *Client) PostFallbackComment(ctx context.Context, prNumber int, reason s
 
 // SubmitReview submits a formal PR review (APPROVE, REQUEST_CHANGES, or COMMENT).
 func (c *Client) SubmitReview(ctx context.Context, prNumber int, event, body string) error {
-	_, _, err := c.inner.PullRequests.CreateReview(ctx, c.owner, c.repo, prNumber, &gh.PullRequestReviewRequest{
-		Body:  gh.Ptr(body),
-		Event: gh.Ptr(event),
-	})
+	return c.SubmitReviewAtSHA(ctx, prNumber, event, body, "")
+}
+
+// SubmitReviewAtSHA submits a formal PR review for the specified commit. An
+// empty SHA preserves GitHub's default behavior of reviewing the current head.
+func (c *Client) SubmitReviewAtSHA(ctx context.Context, prNumber int, event, body, sha string) error {
+	review := &gh.PullRequestReviewRequest{Body: gh.Ptr(body), Event: gh.Ptr(event)}
+	if sha != "" {
+		review.CommitID = gh.Ptr(sha)
+	}
+	_, _, err := c.inner.PullRequests.CreateReview(ctx, c.owner, c.repo, prNumber, review)
 	if err != nil {
 		return fmt.Errorf("submitting %s review on PR #%d: %w", event, prNumber, err)
 	}
