@@ -8,7 +8,7 @@ Merge eligibility requires ALL of the following:
 2. The `auto-approve` flag is enabled (prerequisite)
 3. The `approved` and `lgtm` labels are present on the PR (applied by the classify phase)
 4. The AI risk level is NOT `high`
-5. All CI check runs on the PR head SHA are `success`, `neutral`, `skipped`, or `cancelled` (excluding the deptriage workflow itself). The system also evaluates legacy commit statuses when the token has `statuses: read` permission; if the permission is absent (403), the legacy check is skipped gracefully.
+5. All CI check runs on the PR head SHA are `success`, `neutral`, or `skipped` (excluding the deptriage workflow itself). A `cancelled` check fails the merge gate because it did not complete successfully. The system also evaluates legacy commit statuses when the token has `statuses: read` permission; if the permission is absent (403), the legacy status check is skipped gracefully.
 
 #### Scenario: Approved PR with all checks passing and LOW risk
 - **WHEN** auto-merge is enabled, auto-approve is enabled, the PR has `approved` and `lgtm` labels, the AI risk level is `low`, and all CI checks pass

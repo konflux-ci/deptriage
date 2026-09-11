@@ -116,6 +116,28 @@ func TestSubmitReviewOmitsEmptyCommitID(t *testing.T) {
 	}
 }
 
+func TestChecksAllPassedForSHACancelledCheckFails(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /repos/testorg/testrepo/commits/test-sha/check-runs", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprint(w, `{"total_count": 1, "check_runs": [{"name": "build", "status": "completed", "conclusion": "cancelled"}]}`)
+	})
+	mux.HandleFunc("GET /repos/testorg/testrepo/commits/test-sha/status", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprint(w, `{"state": "success", "statuses": []}`)
+	})
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	status, err := newTestClient(t, server).ChecksAllPassedForSHA(context.Background(), "test-sha", "")
+	if err != nil {
+		t.Fatalf("ChecksAllPassedForSHA() error = %v", err)
+	}
+	if status != ChecksFailed {
+		t.Errorf("ChecksAllPassedForSHA() = %v, want ChecksFailed for cancelled check", status)
+	}
+}
+
 func TestFetchPRRecordsHeadRepository(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /repos/testorg/testrepo/pulls/1", func(w http.ResponseWriter, r *http.Request) {
