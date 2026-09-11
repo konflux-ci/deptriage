@@ -31,16 +31,16 @@ import (
 )
 
 const (
-	flagProvider        = "provider"
-	flagAPIKey          = "api-key"
-	flagModel           = "model"
-	flagAutoApprove     = "auto-approve"
-	flagAutoMerge       = "auto-merge"
-	flagClassifyOutput  = "classify-output"
-	flagDryRun          = "dry-run"
-	flagTrustedBot      = "trusted-bot"
-	flagSuspiciousPath  = "suspicious-path"
-	flagExpectedFile    = "expected-file"
+	flagProvider       = "provider"
+	flagAPIKey         = "api-key"
+	flagModel          = "model"
+	flagAutoApprove    = "auto-approve"
+	flagAutoMerge      = "auto-merge"
+	flagClassifyOutput = "classify-output"
+	flagDryRun         = "dry-run"
+	flagTrustedBot     = "trusted-bot"
+	flagSuspiciousPath = "suspicious-path"
+	flagExpectedFile   = "expected-file"
 )
 
 var (
@@ -117,6 +117,9 @@ func init() {
 
 	// Merge-specific flags
 	mergeCmd.Flags().String("head-sha", envStr("INPUT_HEAD_SHA", ""), "Find and merge open PRs for this head SHA")
+	mergeCmd.Flags().StringSlice(flagTrustedBot, envStringSlice("INPUT_TRUSTED_BOTS"), "Additional trusted bot logins (added to defaults)")
+	mergeCmd.Flags().StringSlice(flagSuspiciousPath, envStringSlice("INPUT_SUSPICIOUS_PATHS"), "Additional suspicious path prefixes")
+	mergeCmd.Flags().StringSlice(flagExpectedFile, envStringSlice("INPUT_EXPECTED_FILES"), "Additional expected file patterns for scope validation")
 
 	rootCmd.AddCommand(classifyCmd, analyzeCmd, bothCmd, mergeCmd)
 }
@@ -191,13 +194,19 @@ func runBoth(cmd *cobra.Command, args []string) error {
 func runMerge(cmd *cobra.Command, args []string) error {
 	headSHA, _ := cmd.Flags().GetString("head-sha")
 	dryRun, _ := cmd.Flags().GetBool(flagDryRun)
+	trustedBots, _ := cmd.Flags().GetStringSlice(flagTrustedBot)
+	suspiciousPaths, _ := cmd.Flags().GetStringSlice(flagSuspiciousPath)
+	expectedFiles, _ := cmd.Flags().GetStringSlice(flagExpectedFile)
 
 	err := merge.Run(cmd.Context(), merge.Options{
-		PRNumber: prNumber,
-		HeadSHA:  headSHA,
-		Repo:     repo,
-		Token:    githubToken,
-		DryRun:   dryRun,
+		PRNumber:        prNumber,
+		HeadSHA:         headSHA,
+		Repo:            repo,
+		Token:           githubToken,
+		DryRun:          dryRun,
+		TrustedBots:     trustedBots,
+		SuspiciousPaths: suspiciousPaths,
+		ExpectedFiles:   expectedFiles,
 	})
 	if err != nil {
 		slog.Warn("merge completed with warning", "error", err)

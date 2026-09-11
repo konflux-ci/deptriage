@@ -239,15 +239,17 @@ Two-tier system for getting dependency PRs merged:
 `auto-merge` is opt-in (default: `false`) and requires `auto-approve` to also be enabled — merging without approval makes no sense.
 
 **Merge eligibility** is driven by deterministic signals, not the AI risk assessment:
-1. `approved` + `lgtm` labels are present (classify phase approved the PR)
-2. All CI checks pass (`success` or `neutral`, excluding the deptriage workflow itself)
-3. `risk/high` label is NOT present (HIGH risk is signaled via label, not via review state)
+1. The PR opener is a trusted dependency bot and its commits and changed files
+   pass supply-chain validation; labels alone are not authorization
+2. `approved` + `lgtm` labels are present (classify phase approved the PR)
+3. All CI checks pass (`success` or `neutral`, excluding the deptriage workflow itself)
+4. `risk/high` label is NOT present (HIGH risk is signaled via label, not via review state)
 
 The AI risk level is informational — MEDIUM risk does NOT block merge. Experience shows that dependency updates (e.g., Tekton task digest bumps) flagged as MEDIUM are safe when CI checks pass. The Konflux pipeline is the real safety gate, not the AI assessment.
 
 The merge step runs at the end of the analyze phase and follows the same graceful failure semantics: errors are logged as warnings, the action never fails due to a merge issue. The workflow must grant `contents: write` permission for the merge API.
 
-**Two-path merge strategy:** The inline `tryMerge` in the analyze phase is a best-effort attempt — it succeeds only if all checks happen to finish before the action. In practice, the deptriage action finishes in ~20s while lint, test, and Konflux pipeline take 30s–5min. The primary merge path is a separate `auto-merge.yaml` workflow triggered on `check_suite: completed` that invokes the `deptriage merge` subcommand. The merge logic lives in Go (`internal/merge/merge.go`), reusing the same `HasLabels`, `ChecksAllPassed`, and `MergePR` methods as the inline path. The `merge` subcommand accepts `--head-sha` to find PRs by commit SHA (from the `check_suite` event) or `--pr-number` for direct invocation. Each time a check suite finishes, the workflow fires and the merge subcommand evaluates eligibility — most firings are no-ops; the last check to complete triggers the actual merge.
+**Two-path merge strategy:** The inline `tryMerge` in the analyze phase is a best-effort attempt — it succeeds only if all checks happen to finish before the action. In practice, the deptriage action finishes in ~20s while lint, test, and Konflux pipeline take 30s–5min. The primary merge path is a separate `auto-merge.yaml` workflow triggered on `check_suite: completed` that invokes the `deptriage merge` subcommand. The merge subcommand accepts `--head-sha` to find PRs by commit SHA (from the `check_suite` event) or `--pr-number` for direct invocation. It independently revalidates bot provenance and supply-chain scope because labels are mutable, checks the event SHA, and sends that SHA to GitHub's merge API. Each time a check suite finishes, the workflow fires and the merge subcommand evaluates eligibility — most firings are no-ops; the last check to complete triggers the actual merge.
 
 **APPROVE-before-merge:** Before calling the merge API, the merge subcommand submits a formal `APPROVE` review on the PR. This satisfies GitHub branch rulesets that require "approval from someone other than the last pusher." The `auto-merge.yaml` workflow uses a GitHub App token (via `actions/create-github-app-token`) rather than the default `GITHUB_TOKEN`, so the approval is attributed to the app identity — a different actor from the PR pusher (`renovate[bot]` or `red-hat-konflux[bot]`). This avoids granting the app "bypass branch protections," which would be overly broad and a security risk (if leaked, it could force-merge anything bypassing all protections).
 

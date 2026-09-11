@@ -125,23 +125,16 @@ func Run(ctx context.Context, opts Options) (*types.ClassifyResult, error) {
 			slog.Info("detected pure GitHub Actions update, excluding workflow/action paths from supply-chain checks")
 		}
 
-		suspiciousFiles := prFiles
-		if isActionsUpdate {
-			suspiciousFiles = filterGitHubActionPaths(prFiles)
-		}
-		if f := DetectSuspiciousFiles(suspiciousFiles, opts.SuspiciousPaths); f != nil {
-			supplyChainFindings = append(supplyChainFindings, f)
-		}
-
 		expectedFiles := opts.ExpectedFiles
-		if isActionsUpdate {
-			expectedFiles = append(append([]string{}, expectedFiles...), gitHubActionPrefixes...)
-		}
 		var submoduleChanges []string
 		if isBotPR {
-			subPaths, err := client.FetchSubmodulePaths(ctx, pr.HeadRef)
+			subPaths, err := client.FetchSubmodulePathsForRepo(ctx, pr.HeadOwner, pr.HeadRepo, pr.HeadSHA)
 			if err != nil {
-				slog.Warn("failed to fetch submodule paths", "error", err)
+				slog.Warn("failed to fetch submodule paths, treating as supply-chain concern (fail-closed)", "error", err)
+				supplyChainFindings = append(supplyChainFindings, supplyChainVerificationFailure(
+					"Could not verify submodule paths",
+					"Failed to fetch submodule paths for supply-chain validation: "+err.Error(),
+				))
 			} else {
 				for _, sp := range subPaths {
 					if slices.Contains(prFiles, sp) {
@@ -152,9 +145,8 @@ func Run(ctx context.Context, opts Options) (*types.ClassifyResult, error) {
 			}
 		}
 
-		if f := ValidateDiffScope(pr.Author, prFiles, opts.TrustedBots, expectedFiles); f != nil {
-			supplyChainFindings = append(supplyChainFindings, f)
-		}
+		supplyChainFindings = append(supplyChainFindings,
+			ValidateFileSafety(pr.Author, prFiles, opts.TrustedBots, opts.SuspiciousPaths, expectedFiles)...)
 
 		if len(submoduleChanges) > 0 {
 			supplyChainFindings = append(supplyChainFindings, &SupplyChainFinding{
@@ -270,6 +262,16 @@ func Run(ctx context.Context, opts Options) (*types.ClassifyResult, error) {
 	slog.Info("classify result written", "path", opts.OutputFile)
 
 	return result, nil
+}
+
+func supplyChainVerificationFailure(labelDesc, message string) *SupplyChainFinding {
+	return &SupplyChainFinding{
+		Key:       "SUPPLY_CHAIN_VERIFICATION_FAILED",
+		Label:     types.LabelSupplyChainSuspiciousFiles,
+		Color:     types.ColorRed,
+		LabelDesc: labelDesc,
+		Message:   message,
+	}
 }
 
 // dominantEcosystem returns "gomod" if any package has a gomod ecosystem, empty otherwise.
