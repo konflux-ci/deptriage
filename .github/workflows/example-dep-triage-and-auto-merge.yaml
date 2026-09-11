@@ -2,16 +2,16 @@
 # Copy both workflow definitions below into separate files in your repo's
 # .github/workflows/ directory and configure the required secrets:
 #
-#   GEMINI_API_KEY                          — for AI risk analysis
 #   KONFLUX_INFRA_AUTO_MERGER_APP_ID        — GitHub App ID for merge identity
 #   KONFLUX_INFRA_AUTO_MERGER_APP_PRIVATE_KEY — GitHub App private key
 #
 # ─── File 1: dep-triage.yaml ─────────────────────────────────────────────────
 #
 # Triggers on dependency PRs from Renovate/MintMaker. Classifies the bump type,
-# runs AI-assisted risk analysis, applies labels, and auto-approves eligible PRs.
+# gathers deterministic import and vulnerability evidence, applies policy
+# labels, and auto-approves eligible PRs.
 
-name: Dependency Impact Analysis
+name: Dependency Update Triage
 
 on:
   pull_request:
@@ -41,10 +41,7 @@ jobs:
         with:
           command: both
           pr-number: ${{ github.event.pull_request.number }}
-          api-key: ${{ secrets.GEMINI_API_KEY }}
-          llm-provider: gemini
           auto-approve: 'true'
-          auto-merge: 'true'
 
 # ─── File 2: auto-merge.yaml ─────────────────────────────────────────────────
 #

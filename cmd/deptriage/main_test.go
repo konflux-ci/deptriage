@@ -14,26 +14,17 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package provider
+package main
 
 import (
-	"context"
-	"fmt"
+	"path/filepath"
+	"testing"
 )
 
-// LLMProvider is the interface for LLM API integrations.
-type LLMProvider interface {
-	Analyze(ctx context.Context, prompt string) (string, error)
-}
-
-// New creates an LLMProvider for the given provider name.
-func New(providerName, apiKey, model string) (LLMProvider, error) {
-	switch providerName {
-	case "gemini":
-		return NewGemini(apiKey, model), nil
-	case "claude":
-		return NewClaude(apiKey, model), nil
-	default:
-		return nil, fmt.Errorf("unsupported LLM provider %q (supported: gemini, claude)", providerName)
+func TestDefaultContextOutputUsesGitHubWorkspace(t *testing.T) {
+	workspace := t.TempDir()
+	t.Setenv("GITHUB_WORKSPACE", workspace)
+	if got, want := defaultContextOutput(), filepath.Join(workspace, "deptriage-context.json"); got != want {
+		t.Errorf("defaultContextOutput() = %q, want %q", got, want)
 	}
 }

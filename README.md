@@ -1,10 +1,10 @@
 # deptriage
 
-Go library and CLI for dependency PR triage and AI-assisted impact analysis.
+Go library and CLI for deterministic dependency PR triage and inspection.
 
 Classifies dependency update PRs by semver bump type, detects risk patterns,
-gathers code-level usage context, and optionally runs LLM-based impact analysis
-to help reviewers prioritize their work.
+gathers deterministic import and vulnerability evidence, and applies policy
+controls for automated dependency updates.
 
 ## Features
 
@@ -14,9 +14,8 @@ to help reviewers prioritize their work.
   digests are treated as minor due to lack of semver guarantees)
 - **Package extraction** -- parses Renovate/Mintmaker PR bodies (markdown tables,
   linked and bare formats) with fallback to PR title
-- **Import analysis** -- uses `go mod why`, `go mod graph`, and source scanning
-  to determine how a dependency is used, with snippet extraction and test
-  coverage detection
+- **Dependency inspection** -- uses `go mod why`, source scanning, GitHub
+  advisories, and `govulncheck` to produce a deterministic JSON report
 - **Risk detection** -- pattern-based heuristics for Go toolchain updates, Go
   version bumps, and container image changes
 - **Supply-chain hardening** -- validates bot PR author identity against commit
@@ -24,11 +23,6 @@ to help reviewers prioritize their work.
   `.github/workflows/`), and verifies dependency PRs only touch expected files;
   blocks auto-approve, auto-merge, and deferred approval when concerns are found.
   The deferred merge path repeats these checks instead of trusting mutable labels.
-- **Security advisories** -- queries GitHub Global Security Advisories API and
-  optionally runs `govulncheck` for reachability analysis
-- **LLM impact analysis** -- assembles structured context and calls Gemini or
-  Claude to produce risk assessments with secret redaction and automatic retry
-  with exponential backoff on rate limits (429)
 - **PR operations** -- applies labels, posts/updates comments with history
   collapse, submits formal review events (APPROVE/REQUEST_CHANGES/COMMENT),
   and applies auto-approve labels for eligible patches and minors
@@ -45,24 +39,21 @@ The project is a standalone Go module with the following subcommands:
 
 - `deptriage classify` -- runs the classification pipeline (semver detection,
   package extraction, risk hints, label application); can fail the workflow
-- `deptriage analyze` -- runs the analysis pipeline (context gathering, LLM
-  call, comment posting, review submission); always exits 0 to avoid blocking CI
+- `deptriage analyze` -- gathers deterministic import, advisory, and
+  `govulncheck` evidence into a local JSON report; performs no GitHub writes
 - `deptriage merge` -- evaluates eligible PRs for auto-merge (trusted bot
   provenance, file scope, labels, and CI checks) and merges via the GitHub API;
   always exits 0
-
-A `both` subcommand runs classify then analyze in sequence, with an optional
-inline merge attempt at the end.
 
 ```
 cmd/deptriage/         CLI entrypoint (cobra)
 internal/
   classify/            Semver detection, package extraction, risk hints, supply-chain validation
-  analyze/             Context assembly, prompt rendering, LLM providers
+  analyze/             Deterministic dependency-inspection report assembly
+  imports/             Go module usage and source import scanning
   merge/               Auto-merge eligibility, deferred approval, APPROVE + merge
   github/              GitHub API client (labels, comments, reviews, merge, dep review, PR commits/files)
-  imports/             go mod tools and source file scanning
-  security/            Advisories, govulncheck, secret redaction
+  security/            Advisory lookup and govulncheck integration
   types/               Shared types
 ```
 
@@ -77,9 +68,12 @@ make build
 # Classify a PR
 deptriage classify --repo owner/repo --pr-number 42 --github-token $TOKEN
 
-# Run full analysis with auto-merge
-deptriage both --repo owner/repo --pr-number 42 --github-token $TOKEN \
-  --api-key $GEMINI_API_KEY --provider gemini --auto-approve --auto-merge
+# Classify and apply deterministic auto-approval labels
+deptriage classify --repo owner/repo --pr-number 42 --github-token $TOKEN --auto-approve
+
+# Gather deterministic import and vulnerability evidence from a prior classify result
+deptriage analyze --classify-output /tmp/deptriage-classify.json \
+  --context-output /tmp/deptriage-context.json
 
 # Merge eligible PRs by head SHA (used in check_suite workflows). The PR must
 # still point to this SHA when deptriage approves or merges it.
@@ -94,7 +88,7 @@ defines a Docker container action that pulls the pre-built image from
 
 ```yaml
 # .github/workflows/dep-triage.yaml
-name: Dependency Impact Analysis
+name: Dependency Update Triage
 
 on:
   pull_request:
@@ -118,8 +112,6 @@ jobs:
         with:
           command: both
           pr-number: ${{ github.event.pull_request.number }}
-          api-key: ${{ secrets.GEMINI_API_KEY }}
-          llm-provider: gemini
           auto-approve: 'true'
 ```
 
@@ -168,16 +160,25 @@ See `.github/workflows/example-dep-triage-and-auto-merge.yaml` for a ready-to-co
 | `command` | `both` | Command to run: `classify`, `analyze`, `both`, or `merge` |
 | `pr-number` | `0` | Pull request number |
 | `github-token` | `${{ github.token }}` | GitHub token for API operations |
-| `api-key` | | LLM provider API key (required for `analyze`) |
-| `llm-provider` | `gemini` | LLM provider: `gemini` or `claude` |
-| `llm-model` | | LLM model name (provider-dependent default) |
-| `auto-approve` | `false` | Apply `approved`/`lgtm` labels for eligible low-risk patches and minors |
-| `auto-merge` | `false` | Merge eligible PRs after analysis (requires `auto-approve`) |
+| `api-key` | | Deprecated and ignored; retained for compatibility |
+| `llm-provider` | `gemini` | Deprecated and ignored; retained for compatibility |
+| `llm-model` | | Deprecated and ignored; retained for compatibility |
+| `context-output` | `$GITHUB_WORKSPACE/deptriage-context.json` | Persistent path for the deterministic inspection report |
+| `auto-approve` | `false` | Apply `approved`/`lgtm` labels for eligible patches, minors, and digests without deterministic risk hints |
+| `auto-merge` | `false` | Deprecated and ignored; use the separate SHA-bound `merge` command |
 | `dry-run` | `false` | Suppress all GitHub API writes; log what would happen |
 | `head-sha` | | Head SHA to find PRs for; checks and merge are bound to this SHA |
 | `trusted-bots` | | Comma-separated additional trusted bot logins for classification and deferred merge (added to defaults) |
 | `suspicious-paths` | | Comma-separated additional suspicious path prefixes for classification and deferred merge |
 | `expected-files` | | Comma-separated additional expected file patterns for classification and deferred merge |
+
+The `analyze` command produces deterministic import, advisory, and vulnerability
+evidence beneath `GITHUB_WORKSPACE` by default so later workflow steps can read
+it. Use `context-output` to choose another path. `context-json` is set only
+after that report is written successfully. Analyze never calls an LLM and never
+applies labels, reviews, comments, or merges. Its `risk-level` output is always
+`unknown`; this output and the former LLM inputs remain only for client
+compatibility.
 
 ## Supply-Chain Hardening
 
@@ -241,8 +242,6 @@ engineer must review the upstream changes.
   `risk-hint/*` labels, except `supply-chain/submodule-update` which is
   **yellow** (`#fbca04`) since it is a caution rather than an attack indicator
 - Any supply-chain finding blocks auto-approve in the classify phase
-- The analyze phase skips formal `APPROVE` reviews when supply-chain findings
-  exist, even if the LLM assesses LOW risk
 - The merge phase rejects PRs with any `supply-chain/*` label and independently
   revalidates trusted-bot authorship, commit authors, changed-file scope,
   suspicious paths, and submodule changes before deferred approval or merge
@@ -256,9 +255,6 @@ engineer must review the upstream changes.
   stale approval from letting a tampered PR merge
 - All checks operate on the PR metadata and file list, not file contents --
   content-based scanning is a non-goal
-- Running `deptriage analyze` standalone (without a prior `classify` step)
-  skips supply-chain checks -- always use `both` or run `classify` first to
-  ensure tamper protection is active
 
 ## Building
 
