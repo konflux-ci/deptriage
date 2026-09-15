@@ -29,19 +29,11 @@ const depReviewTimeout = 30 * time.Second
 
 // DepReviewEntry represents a single dependency change from the Dependency Review API.
 type DepReviewEntry struct {
-	Name             string   `json:"name"`
-	Version          string   `json:"version"`
-	PreviousVersion  string   `json:"previous_version"`
-	Ecosystem        string   `json:"ecosystem"`
-	Vulnerabilities  []DepVuln `json:"vulnerabilities"`
-	ChangeType       string   `json:"change_type"` // added, removed, updated
-}
-
-// DepVuln represents a vulnerability surfaced by the Dependency Review API.
-type DepVuln struct {
-	Severity        string `json:"severity"`
-	AdvisoryGHSAID  string `json:"advisory_ghsa_id"`
-	AdvisorySummary string `json:"advisory_summary"`
+	Name            string `json:"name"`
+	Version         string `json:"version"`
+	PreviousVersion string `json:"previous_version"`
+	Ecosystem       string `json:"ecosystem"`
+	ChangeType      string `json:"change_type"` // added, removed, updated
 }
 
 // FetchDependencyReview calls the GitHub Dependency Review API.
@@ -82,18 +74,4 @@ func DepReviewToPackages(entries []DepReviewEntry) []types.PackageInfo {
 		})
 	}
 	return pkgs
-}
-
-// DepReviewVulnerabilities extracts advisories from dependency review entries.
-func DepReviewVulnerabilities(entries []DepReviewEntry) map[string][]types.Advisory {
-	result := make(map[string][]types.Advisory)
-	for _, e := range entries {
-		for _, v := range e.Vulnerabilities {
-			result[e.Name] = append(result[e.Name], types.Advisory{
-				GHSAID:   v.AdvisoryGHSAID,
-				Severity: v.Severity,
-			})
-		}
-	}
-	return result
 }

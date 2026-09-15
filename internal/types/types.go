@@ -16,11 +16,11 @@ limitations under the License.
 
 package types
 
-// Well-known label names used across classify, analyze, and merge phases.
+// Well-known label names used across classify and merge phases.
 const (
-	LabelApproved  = "approved"
-	LabelLGTM      = "lgtm"
-	LabelRiskHigh  = "risk/high"
+	LabelApproved    = "approved"
+	LabelLGTM        = "lgtm"
+	LabelRiskHigh    = "risk/high"
 	LabelSemverPatch = "semver/patch"
 	LabelSemverMinor = "semver/minor"
 
@@ -43,7 +43,6 @@ const (
 // GitHub pull request review event types.
 const (
 	ReviewApprove = "APPROVE"
-	ReviewComment = "COMMENT"
 )
 
 // Shared structured log keys.
@@ -129,31 +128,13 @@ func (b BumpType) Color() string {
 	}
 }
 
-// RiskLevel represents an AI-assessed risk level.
+// RiskLevel is retained for compatibility with the action's risk-level output.
+// Deterministic inspection does not assess a risk level and reports unknown.
 type RiskLevel string
 
 func (r RiskLevel) String() string { return string(r) }
-func (r RiskLevel) Label() string  { return "risk/" + string(r) }
 
-func (r RiskLevel) Color() string {
-	switch r {
-	case RiskLow:
-		return ColorGreen
-	case RiskMedium:
-		return ColorYellow
-	case RiskHigh:
-		return ColorRed
-	default:
-		return ""
-	}
-}
-
-const (
-	RiskLow     RiskLevel = "low"
-	RiskMedium  RiskLevel = "medium"
-	RiskHigh    RiskLevel = "high"
-	RiskUnknown RiskLevel = "unknown"
-)
+const RiskUnknown RiskLevel = "unknown"
 
 // SupplyChainFindingResult is a serializable supply-chain finding for ClassifyResult.
 type SupplyChainFindingResult struct {
@@ -165,15 +146,15 @@ type SupplyChainFindingResult struct {
 
 // ClassifyResult is the output of the classify subcommand.
 type ClassifyResult struct {
-	BumpType             BumpType                   `json:"bumpType"`
-	Packages             []PackageInfo              `json:"packages"`
-	RiskHints            string                     `json:"riskHints"`
-	SupplyChainFindings  []SupplyChainFindingResult  `json:"supplyChainFindings,omitempty"`
-	PRTitle              string                     `json:"prTitle"`
-	PRBody               string                     `json:"prBody"`
-	Repo                 string                     `json:"repo"`
-	PRNumber             int                        `json:"prNumber"`
-	Label                string                     `json:"label,omitempty"`
+	BumpType            BumpType                   `json:"bumpType"`
+	Packages            []PackageInfo              `json:"packages"`
+	RiskHints           string                     `json:"riskHints"`
+	SupplyChainFindings []SupplyChainFindingResult `json:"supplyChainFindings,omitempty"`
+	PRTitle             string                     `json:"prTitle"`
+	PRBody              string                     `json:"prBody"`
+	Repo                string                     `json:"repo"`
+	PRNumber            int                        `json:"prNumber"`
+	Label               string                     `json:"label,omitempty"`
 }
 
 // PackageInfo holds extracted package metadata from the PR.
@@ -201,8 +182,8 @@ type Advisory struct {
 
 // GovulncheckResult holds govulncheck output for a package.
 type GovulncheckResult struct {
-	Reachable bool              `json:"reachable"`
-	Findings  []VulnFinding     `json:"findings"`
+	Reachable bool          `json:"reachable"`
+	Findings  []VulnFinding `json:"findings"`
 }
 
 // VulnFinding describes a single reachable vulnerability.
@@ -212,21 +193,21 @@ type VulnFinding struct {
 	CallChain string `json:"callChain,omitempty"`
 }
 
-// PackageContext holds the full analysis context for a single package.
+// PackageContext holds deterministic inspection evidence for a package.
 type PackageContext struct {
-	Name             string              `json:"name"`
-	Changelog        string              `json:"changelog,omitempty"`
-	NoDirectImports  bool                `json:"noDirectImports"`
-	ImportChain      string              `json:"importChain,omitempty"`
-	Imports          []ImportInfo        `json:"imports,omitempty"`
-	Advisories       []Advisory          `json:"advisories,omitempty"`
-	Govulncheck      *GovulncheckResult  `json:"govulncheck,omitempty"`
+	Name            string             `json:"name"`
+	Changelog       string             `json:"changelog,omitempty"`
+	NoDirectImports bool               `json:"noDirectImports"`
+	ImportChain     string             `json:"importChain,omitempty"`
+	Imports         []ImportInfo       `json:"imports,omitempty"`
+	Advisories      []Advisory         `json:"advisories,omitempty"`
+	Govulncheck     *GovulncheckResult `json:"govulncheck,omitempty"`
 }
 
-// ContextJSON is the full context assembled for LLM consumption.
+// ContextJSON is the deterministic dependency-inspection report.
 type ContextJSON struct {
 	PRBody              string                     `json:"prBody"`
-	Packages            []PackageContext            `json:"packages"`
+	Packages            []PackageContext           `json:"packages"`
 	RiskHints           string                     `json:"riskHints,omitempty"`
-	SupplyChainFindings []SupplyChainFindingResult  `json:"supplyChainFindings,omitempty"`
+	SupplyChainFindings []SupplyChainFindingResult `json:"supplyChainFindings,omitempty"`
 }

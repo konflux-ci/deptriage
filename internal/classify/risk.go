@@ -29,9 +29,8 @@ type RiskHint struct {
 	Label       string // GitHub label name, e.g. "risk-hint/go-toolchain"
 	Color       string // Label color hex
 	LabelDesc   string // Short description for the GitHub label (max 100 chars)
-	Description string // Full explanation for the LLM prompt
+	Description string // Explanation included in the classification result
 }
-
 
 var (
 	goToolchainRe    = regexp.MustCompile(`(?i)go-toolset|golang.*docker|docker.*golang`)

@@ -1,6 +1,6 @@
 ---
 name: "Dependency Impact Analysis"
-description: "Classify dependency PRs by semver bump type, detect risk patterns, and run AI-assisted impact analysis"
+description: "Classify dependency PRs, gather deterministic inspection evidence, and enforce merge policy"
 author: "konflux-infra"
 
 inputs:
@@ -17,21 +17,24 @@ inputs:
     required: true
     default: ${{ github.token }}
   api-key:
-    description: "LLM provider API key (required for analyze command)"
+    description: "Deprecated and ignored; retained for compatibility"
     required: false
   llm-provider:
-    description: "LLM provider: gemini or claude"
+    description: "Deprecated and ignored; retained for compatibility"
     required: false
     default: "gemini"
   llm-model:
-    description: "LLM model name (provider-dependent default)"
+    description: "Deprecated and ignored; retained for compatibility"
+    required: false
+  context-output:
+    description: "Path for the deterministic inspection report (defaults to $GITHUB_WORKSPACE/deptriage-context.json)"
     required: false
   auto-approve:
-    description: "Apply approved/lgtm labels and formal APPROVE review for eligible low-risk patches and minors"
+    description: "Apply approved/lgtm labels for deterministic eligible patches, minors, and digests"
     required: false
     default: "false"
   auto-merge:
-    description: "Merge eligible PRs after analysis when auto-approve labels are present and CI checks pass (requires auto-approve)"
+    description: "Deprecated and ignored; merge is performed only by the merge command"
     required: false
     default: "false"
   dry-run:
@@ -55,9 +58,9 @@ outputs:
   bump-type:
     description: "Detected semver bump type (major/minor/patch/digest/unknown)"
   risk-level:
-    description: "AI-assessed risk level (low/medium/high/unknown)"
+    description: "Always unknown; retained for compatibility after LLM analysis removal"
   context-json:
-    description: "Path to the assembled context JSON file"
+    description: "Path to the deterministic inspection report JSON"
 
 runs:
   using: "docker"
@@ -70,6 +73,7 @@ runs:
     INPUT_API_KEY: ${{ inputs.api-key }}
     INPUT_LLM_PROVIDER: ${{ inputs.llm-provider }}
     INPUT_LLM_MODEL: ${{ inputs.llm-model }}
+    INPUT_CONTEXT_OUTPUT: ${{ inputs.context-output }}
     INPUT_AUTO_APPROVE: ${{ inputs.auto-approve }}
     INPUT_AUTO_MERGE: ${{ inputs.auto-merge }}
     INPUT_DRY_RUN: ${{ inputs.dry-run }}
