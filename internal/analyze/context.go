@@ -25,7 +25,7 @@ import (
 	"github.com/konflux-ci/deptriage/internal/security"
 	"github.com/konflux-ci/deptriage/internal/types"
 
-	gh "github.com/google/go-github/v86/github"
+	gh "github.com/google/go-github/v92/github"
 )
 
 // GatherContext assembles deterministic dependency-inspection evidence. Its
