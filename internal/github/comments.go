@@ -20,7 +20,7 @@ import (
 	"context"
 	"fmt"
 
-	gh "github.com/google/go-github/v86/github"
+	gh "github.com/google/go-github/v92/github"
 )
 
 // SubmitReview submits a formal PR review (APPROVE, REQUEST_CHANGES, or COMMENT).

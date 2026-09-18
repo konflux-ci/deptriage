@@ -25,7 +25,7 @@ import (
 	"net/url"
 	"testing"
 
-	gh "github.com/google/go-github/v86/github"
+	gh "github.com/google/go-github/v92/github"
 )
 
 // newTestClient creates a Client backed by the given httptest.Server.
